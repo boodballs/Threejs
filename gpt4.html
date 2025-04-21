@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Responsive 3D Scene - Three.js</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #181a21;
+    }
+    #three-canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+    }
+    #loading-indicator {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(24,26,33,0.85);
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      font-size: 1.2em;
+      padding: 24px 32px;
+      border-radius: 12px;
+      z-index: 10;
+      display: none;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-indicator">Loading 3D Scene...</div>
+  <!-- Three.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.min.js"></script>
+  <script>
+    // === Globals ===
+    let scene, camera, renderer, raycaster, objects = [];
+    let isDragging = false, lastPointer = { x: 0, y: 0 };
+    let sceneRotation = { x: 0, y: 0 }, sceneTarget = { x: 0, y: 0 };
+    let canvas, loadingDiv;
+    let animationId;
+    let lastFrameTime = 0;
+
+    // === Loading Indicator Handling ===
+    function showLoading(msg = "Loading 3D Scene...") {
+      loadingDiv.style.display = "block";
+      loadingDiv.textContent = msg;
+    }
+    function hideLoading() {
+      loadingDiv.style.display = "none";
+    }
+
+    // === Responsive Resize ===
+    function onWindowResize() {
+      if (!renderer || !camera) return;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+    }
+
+    // === Scene Setup ===
+    function init() {
+      loadingDiv = document.getElementById('loading-indicator');
+      showLoading();
+
+      try {
+        // Scene
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x181a21);
+
+        // Camera (slightly wider FOV for mobile)
+        camera = new THREE.PerspectiveCamera(
+          window.innerWidth < 600 ? 80 : 65,
+          window.innerWidth / window.innerHeight,
+          0.1, 100
+        );
+        camera.position.set(0, 1.5, 7);
+
+        // Renderer with pixel ratio limit for performance
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight, false);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.domElement.id = 'three-canvas';
+        document.body.appendChild(renderer.domElement);
+        canvas = renderer.domElement;
+
+        // Lighting: ambient + subtle directional for soft shadows
+        scene.add(new THREE.AmbientLight(0xcccccc, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
+
+        // Raycaster for object interaction
+        raycaster = new THREE.Raycaster();
+
+        // === Add 3 Interactive 3D Objects ===
+
+        // 1: Spinning Cube with hover highlight
+        const geomCube = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+        const matCube = new THREE.MeshStandardMaterial({ color: 0x4ecdc4 });
+        const cube = new THREE.Mesh(geomCube, matCube);
+        cube.position.set(-2.4, 0, 0);
+        cube.userData = { type: "cube", isHovered: false };
+        scene.add(cube);
+        objects.push(cube);
+
+        // 2: Bouncing Sphere with click color toggle
+        const geomSphere = new THREE.SphereGeometry(0.8, 32, 32);
+        const matSphere = new THREE.MeshStandardMaterial({ color: 0xff6b6b });
+        const sphere = new THREE.Mesh(geomSphere, matSphere);
+        sphere.position.set(0, 0, 0);
+        sphere.userData = { type: "sphere", toggled: false };
+        scene.add(sphere);
+        objects.push(sphere);
+
+        // 3: Torus that scales on interaction
+        const geomTorus = new THREE.TorusGeometry(0.7, 0.25, 16, 64);
+        const matTorus = new THREE.MeshStandardMaterial({ color: 0xffe66d });
+        const torus = new THREE.Mesh(geomTorus, matTorus);
+        torus.position.set(2.4, 0, 0);
+        torus.userData = { type: "torus", scaleUp: false };
+        scene.add(torus);
+        objects.push(torus);
+
+        // === Controls Setup ===
+        // Unified pointer events for mouse and touch
+        canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
+        canvas.addEventListener('pointermove', onPointerMove, { passive: false });
+        canvas.addEventListener('pointerup', onPointerUp, { passive: false });
+        canvas.addEventListener('pointerleave', onPointerUp, { passive: false });
+        canvas.addEventListener('pointercancel', onPointerUp, { passive: false });
+
+        // Prevent context menu on long-tap
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Resize handler
+        window.addEventListener('resize', onWindowResize);
+
+        hideLoading();
+        animate();
+      } catch (err) {
+        showLoading("Error initializing scene. Please refresh.");
+        console.error("Initialization error:", err);
+      }
+    }
+
+    // === Pointer Handling for Rotation/Interaction ===
+    let pointerDown = false, pointerMoved = false;
+    let interactionObject = null;
+    function getPointerPos(e) {
+      if (e.touches && e.touches.length > 0) {
+        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      } else {
+        return { x: e.clientX, y: e.clientY };
+      }
+    }
+    function onPointerDown(e) {
+      pointerDown = true;
+      pointerMoved = false;
+      lastPointer = getPointerPos(e);
+      // For interaction, perform raycast on pointerdown
+      const intersects = getIntersects(lastPointer.x, lastPointer.y);
+      if (intersects.length > 0) {
+        interactionObject = intersects[0].object;
+      } else {
+        interactionObject = null;
+      }
+    }
+    function onPointerMove(e) {
+      if (!pointerDown) {
+        // Hover feedback
+        const pos = getPointerPos(e);
+        const intersects = getIntersects(pos.x, pos.y);
+        objects.forEach(obj => {
+          if (obj.userData.type === "cube") {
+            obj.userData.isHovered = (intersects.length > 0 && intersects[0].object === obj);
+          }
+        });
+        return;
+      }
+      pointerMoved = true;
+      const pos = getPointerPos(e);
+      const dx = (pos.x - lastPointer.x) / window.innerWidth;
+      const dy = (pos.y - lastPointer.y) / window.innerHeight;
+      // Rotate scene (limit x angle)
+      sceneTarget.y += dx * Math.PI;
+      sceneTarget.x += dy * Math.PI;
+      sceneTarget.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, sceneTarget.x));
+      lastPointer = pos;
+      e.preventDefault();
+    }
+    function onPointerUp(e) {
+      pointerDown = false;
+      if (!pointerMoved && interactionObject) {
+        // === Object Interactions ===
+        if (interactionObject.userData.type === "sphere") {
+          // Toggle color on click/tap
+          interactionObject.userData.toggled = !interactionObject.userData.toggled;
+          interactionObject.material.color.set(interactionObject.userData.toggled ? 0x5f27cd : 0xff6b6b);
+        }
+        if (interactionObject.userData.type === "torus") {
+          // Scale up briefly on tap
+          interactionObject.userData.scaleUp = true;
+        }
+      }
+      interactionObject = null;
+      pointerMoved = false;
+    }
+
+    // === Raycasting for Interaction/Highlight ===
+    function getIntersects(x, y) {
+      const mouse = new THREE.Vector2(
+        (x / window.innerWidth) * 2 - 1,
+        -(y / window.innerHeight) * 2 + 1
+      );
+      raycaster.setFromCamera(mouse, camera);
+      return raycaster.intersectObjects(objects);
+    }
+
+    // === Animation Loop with Performance Optimizations ===
+    function animate(time = 0) {
+      // Limit to ~60fps for smoothness, but allow browser to drop frames if under load
+      animationId = requestAnimationFrame(animate);
+
+      // === Animate Objects ===
+
+      // Cube: spin, highlight on hover
+      const cube = objects[0];
+      cube.rotation.y += 0.018;
+      cube.rotation.x += 0.012;
+      cube.material.emissive.set(cube.userData.isHovered ? 0x00d9ff : 0x000000);
+
+      // Sphere: bounce up and down
+      const sphere = objects[1];
+      sphere.position.y = Math.sin((time/800)) * 0.45;
+
+      // Torus: rotate and scale on tap
+      const torus = objects[2];
+      torus.rotation.x += 0.008;
+      torus.rotation.z += 0.010;
+      if (torus.userData.scaleUp) {
+        // Animate scale up then back to normal
+        torus.scale.lerp(new THREE.Vector3(1.7,1.7,1.7), 0.2);
+        if (torus.scale.x > 1.6) torus.userData.scaleUp = false;
+      } else {
+        torus.scale.lerp(new THREE.Vector3(1,1,1), 0.15);
+      }
+
+      // === Smooth Scene Rotation Damping ===
+      sceneRotation.x += (sceneTarget.x - sceneRotation.x) * 0.18;
+      sceneRotation.y += (sceneTarget.y - sceneRotation.y) * 0.18;
+      scene.rotation.x = sceneRotation.x;
+      scene.rotation.y = sceneRotation.y;
+
+      // === Render ===
+      renderer.render(scene, camera);
+    }
+
+    // === Clean Up on Page Exit ===
+    window.addEventListener("beforeunload", () => {
+      if (animationId) cancelAnimationFrame(animationId);
+      if (renderer) renderer.dispose();
+    });
+
+    // === Start Everything ===
+    window.onload = init;
+  </script>
+</body>
+</html>
