@@ -1,25 +1,19 @@
-// Import the entire Three.js library
+// Import Three.js core
 import * as THREE from 'three';
+// Import OrbitControls addon
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // --- Basic Setup ---
-
-// Get the canvas element from HTML
 const canvas = document.getElementById('three-canvas');
-
-// Scene: Holds all objects, cameras, lights
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x222222); // Set a background color
-
-// Camera: Defines what we see
+scene.background = new THREE.Color(0x222222);
 const camera = new THREE.PerspectiveCamera(
-    75, // FOV
-    window.innerWidth / window.innerHeight, // Aspect Ratio
-    0.1, // Near
-    1000 // Far
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
 );
-camera.position.z = 5; // Move camera back
-
-// Renderer: Draws the scene onto the canvas
+camera.position.z = 5;
 const renderer = new THREE.WebGLRenderer({
     canvas: canvas,
     antialias: true
@@ -27,69 +21,56 @@ const renderer = new THREE.WebGLRenderer({
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
+// --- Orbit Controls ---
+// Pass the camera and the canvas element (renderer.domElement)
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; // Smoother feeling interaction
+controls.dampingFactor = 0.05; // Adjust damping effect
+// controls.autoRotate = true; // Uncomment for auto-rotation effect
+// controls.autoRotateSpeed = 0.5; // Adjust auto-rotation speed
+
 
 // --- Texture Loading ---
-
-// Create a texture loader
 const textureLoader = new THREE.TextureLoader();
-
-// Load the 'electric.jpg' image
-// Make sure 'electric.jpg' is in the same folder as index.html!
 const electricTexture = textureLoader.load('electric.jpg',
-    // Optional: onLoad callback
-    (texture) => {
-        console.log('Texture loaded successfully');
-        // You could adjust aspect ratio here if needed
-        // planeMesh.scale.set(texture.image.width / 100, texture.image.height / 100, 1);
-    },
-    // Optional: onProgress callback (not typically needed for single textures)
+    () => { console.log('Texture loaded'); },
     undefined,
-    // Optional: onError callback
-    (err) => {
-        console.error('Error loading texture:', err);
-    }
+    (err) => { console.error('Error loading texture:', err); }
 );
 
 // --- Scene Content ---
-
-// Geometry: Create a plane to display the texture
-// PlaneGeometry(width, height)
-const geometry = new THREE.PlaneGeometry(4, 4); // Adjust size as needed
-
-// Material: Use MeshBasicMaterial for simple texture display (unaffected by lights)
-// Set the 'map' property to our loaded texture
+const geometry = new THREE.PlaneGeometry(4, 4);
 const material = new THREE.MeshBasicMaterial({
     map: electricTexture,
-    side: THREE.DoubleSide // Render both sides of the plane
+    side: THREE.DoubleSide
 });
-
-// Mesh: Combine Geometry and Material
 const planeMesh = new THREE.Mesh(geometry, material);
-scene.add(planeMesh); // Add the textured plane to the scene
+scene.add(planeMesh);
 
-// Lights (Still useful if you add other materials like MeshStandardMaterial)
+// Lights (Still here, useful if you switch to MeshStandardMaterial)
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
-
 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(1, 1, 1);
 scene.add(directionalLight);
 
 
 // --- Animation Loop ---
-
 function animate() {
     requestAnimationFrame(animate);
 
-    // Animate the plane (make it rotate slowly)
-    planeMesh.rotation.x += 0.005;
-    planeMesh.rotation.y += 0.005;
+    // *** IMPORTANT: Update controls ***
+    // Required if enableDamping or autoRotate is set to true
+    controls.update();
+
+    // --- REMOVED Automatic Rotation ---
+    // planeMesh.rotation.x += 0.005; // No longer needed - user controls rotation
+    // planeMesh.rotation.y += 0.005; // No longer needed
 
     renderer.render(scene, camera);
 }
 
 // --- Handle Window Resizing ---
-
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -101,5 +82,5 @@ window.addEventListener('resize', onWindowResize);
 // --- Start Everything ---
 animate();
 
-console.log("Three.js setup complete. Should see a rotating plane with the electric.jpg texture.");
+console.log("Three.js setup complete. Drag to rotate, scroll to zoom.");
 
