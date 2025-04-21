@@ -1,3 +1,12 @@
-Build a cool animated 3js app that has mouse/touch interactions in html that works well for all devices. Give me the full code
+Create a responsive 3D web application using Three.js that features:
+
+1. A visually appealing animated scene with at least 3 interactive 3D objects
+2. Smooth mouse/touch controls that work consistently across desktop and mobile devices
+3. Automatic adaptation to different screen sizes and orientations
+4. Performance optimization techniques for smooth framerates on lower-end devices
+5. Clear comments explaining key parts of the implementation
+
+Please provide the complete, fully-functional HTML, CSS, and JavaScript code as a single HTML file that can be run directly in a browser without any additional dependencies beyond Three.js CDN. Include appropriate error handling and loading indicators.
+
 
 made a special prompt only for gemini 2.5 pro to create a 3js with an image 
