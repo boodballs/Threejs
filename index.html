@@ -3,130 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Image Viewer</title>
+    <title>Basic Image Test</title>
     <style>
-        /* Basic CSS to fill the screen */
-        body { margin: 0; overflow: hidden; background-color: #000; }
-        canvas { display: block; }
-    </style>
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.163.0/build/three.module.js"
-            }
+        body { 
+            font-family: sans-serif; 
+            padding: 20px; 
+            line-height: 1.6; 
         }
-    </script>
+        h1 { 
+            color: navy; 
+        }
+        img { 
+            max-width: 80%; /* Limit image size */
+            height: auto; 
+            display: block; /* Center it */
+            margin: 20px auto; /* Add space */
+            border: 3px solid red; /* Add a very obvious border */
+            background-color: lightgray; /* Background in case image fails */
+        }
+        p { 
+            color: #333; 
+        }
+        strong {
+            color: red;
+        }
+    </style>
 </head>
 <body>
-    <script type="module">
-        // Import the Three.js library
-        import * as THREE from 'three';
 
-        // --- Core Scene Setup ---
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(
-            75, // Field of View (degrees)
-            window.innerWidth / window.innerHeight, // Aspect Ratio
-            0.1, // Near Clipping Plane
-            1000 // Far Clipping Plane
-        );
-        const renderer = new THREE.WebGLRenderer({ antialias: true }); // Enable anti-aliasing for smoother edges
+    <h1>Testing Basic Image Display</h1>
 
-        // Set renderer size to match the window
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        // Set the pixel ratio for sharper rendering on high-DPI displays
-        renderer.setPixelRatio(window.devicePixelRatio);
-        // Add the renderer's canvas element to the HTML body
-        document.body.appendChild(renderer.domElement);
+    <p>This is a test page. If you are seeing this text, the HTML file (<code>index.html</code>) itself is being loaded correctly.</p>
 
-        // --- Texture Loading ---
-        // IMPORTANT: 'electric.jpg' must be in the same folder as this index.html file!
-        const textureLoader = new THREE.TextureLoader();
-        const imageTexture = textureLoader.load(
-            'electric.jpg',
-            // --- onLoad callback ---
-            (texture) => {
-                console.log('Texture loaded successfully!');
-                // Set color space for correct appearance
-                texture.colorSpace = THREE.SRGBColorSpace;
+    <p>Below this paragraph, you should see the image 'electric.jpg' with a <strong>thick red border</strong> around it.</p>
 
-                // --- Geometry & Material (after texture loads) ---
-                // Calculate aspect ratio to size the plane correctly
-                const aspectRatio = texture.image.naturalWidth / texture.image.naturalHeight;
-                const planeHeight = 6; // Define how tall the plane should be in the scene
-                const planeWidth = planeHeight * aspectRatio;
+    <img src="electric.jpg" alt="Attempting to load electric.jpg">
 
-                // Create the plane geometry
-                const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
-                // Create a basic material using the loaded texture
-                const material = new THREE.MeshBasicMaterial({
-                    map: texture, // Apply the texture
-                    side: THREE.DoubleSide // Render on both sides (optional)
-                });
+    <p>Did the image load above this line? If you see the heading, this text, and the image (or at least the red border and grey box if the image path is wrong), then Netlify is serving the HTML correctly.</p>
 
-                // Create the mesh (the actual object)
-                const imagePlane = new THREE.Mesh(geometry, material);
+    <hr>
+    <p><strong>File Requirements:</strong></p>
+    <ul>
+        <li>This file must be named <code>index.html</code> (all lowercase).</li>
+        <li>An image file named <code>electric.jpg</code> (all lowercase) must be in the exact same folder/directory.</li>
+    </ul>
 
-                // Add the plane mesh to the scene
-                scene.add(imagePlane);
-
-                // Adjust camera position slightly based on plane size (optional)
-                // camera.position.z = planeHeight / 1.8; // Adjust multiplier as needed
-
-                // Start the animation loop ONLY after the texture and mesh are ready
-                animate();
-            },
-            // --- onProgress callback (optional) ---
-            undefined,
-            // --- onError callback ---
-            (error) => {
-                console.error('Error loading texture:', error);
-                // You could display an error message to the user here
-                const errorMsg = document.createElement('div');
-                errorMsg.textContent = 'Failed to load electric.jpg. Ensure it is in the same folder.';
-                errorMsg.style.color = 'red';
-                errorMsg.style.position = 'absolute';
-                errorMsg.style.top = '10px';
-                errorMsg.style.left = '10px';
-                errorMsg.style.fontFamily = 'sans-serif';
-                errorMsg.style.backgroundColor = 'black';
-                errorMsg.style.padding = '5px';
-                document.body.appendChild(errorMsg);
-            }
-        );
-
-        // --- Camera Initial Position ---
-        // Move the camera back along the Z-axis so we can see the scene
-        camera.position.z = 5; // Adjust this value as needed
-
-        // --- Window Resize Handling ---
-        function onWindowResize() {
-            // Update camera aspect ratio
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix(); // Apply the changes
-
-            // Update renderer size
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio); // Update pixel ratio too
-        }
-        window.addEventListener('resize', onWindowResize, false);
-
-        // --- Animation Loop ---
-        // We define it here, but call it only after the texture loads successfully
-        function animate() {
-            requestAnimationFrame(animate); // Request the next frame
-
-            // Add any animations here (e.g., rotating the plane)
-            // if (scene.children.length > 0 && scene.children[0].type === "Mesh") { // Check if plane exists
-            //     scene.children[0].rotation.y += 0.005; // Gently rotate
-            // }
-
-            // Render the scene from the perspective of the camera
-            renderer.render(scene, camera);
-        }
-
-        // Note: animate() is called inside the texture onLoad callback above
-
-    </script>
 </body>
 </html>
