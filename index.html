@@ -3,50 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Basic Image Test</title>
+    <title>Three.js and Image Test</title>
     <style>
-        body { 
-            font-family: sans-serif; 
-            padding: 20px; 
-            line-height: 1.6; 
+        /* Remove default margin */
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            background-color: #111; /* Dark background for contrast */
         }
-        h1 { 
-            color: navy; 
+
+        /* Style the canvas to fill the screen */
+        #three-canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
         }
-        img { 
-            max-width: 80%; /* Limit image size */
-            height: auto; 
-            display: block; /* Center it */
-            margin: 20px auto; /* Add space */
-            border: 3px solid red; /* Add a very obvious border */
-            background-color: lightgray; /* Background in case image fails */
-        }
-        p { 
-            color: #333; 
-        }
-        strong {
-            color: red;
+
+        /* Style the image */
+        #test-image {
+            border: 5px solid red; /* Thick red border */
+            width: 150px;          /* Make it a reasonable size */
+            height: auto;
+            position: absolute;    /* Position it over the canvas */
+            top: 20px;
+            left: 20px;
+            z-index: 10;           /* Ensure it's on top */
         }
     </style>
 </head>
 <body>
 
-    <h1>Testing Basic Image Display</h1>
+    <img id="test-image" src="electric.jpg" alt="Electric Test Image">
 
-    <p>This is a test page. If you are seeing this text, the HTML file (<code>index.html</code>) itself is being loaded correctly.</p>
+    <canvas id="three-canvas"></canvas>
 
-    <p>Below this paragraph, you should see the image 'electric.jpg' with a <strong>thick red border</strong> around it.</p>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.163.0/build/three.module.js"
+            }
+        }
+    </script>
 
-    <img src="electric.jpg" alt="Attempting to load electric.jpg">
-
-    <p>Did the image load above this line? If you see the heading, this text, and the image (or at least the red border and grey box if the image path is wrong), then Netlify is serving the HTML correctly.</p>
-
-    <hr>
-    <p><strong>File Requirements:</strong></p>
-    <ul>
-        <li>This file must be named <code>index.html</code> (all lowercase).</li>
-        <li>An image file named <code>electric.jpg</code> (all lowercase) must be in the exact same folder/directory.</li>
-    </ul>
+    <script type="module" src="main.js"></script>
 
 </body>
 </html>
