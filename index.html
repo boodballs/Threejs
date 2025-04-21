@@ -3,22 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Texture Test</title>
+    <title>Three.js Texture Interaction</title>
     <style>
-        /* Remove default margin */
         body {
             margin: 0;
-            overflow: hidden; /* Prevent scrollbars */
-            background-color: #111; /* Dark background for contrast */
+            overflow: hidden;
+            background-color: #111;
         }
-
-        /* Style the canvas to fill the screen */
         #three-canvas {
             display: block;
             width: 100vw;
             height: 100vh;
         }
-        /* Removed CSS for #test-image as the img tag is gone */
     </style>
 </head>
 <body>
@@ -28,7 +24,8 @@
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.163.0/build/three.module.js"
+                "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
             }
         }
     </script>
