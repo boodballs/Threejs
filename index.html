@@ -2,223 +2,141 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Animated 3D Torus - Three.js Interactive Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Interactive 3D Sphere - Three.js</title>
   <style>
     html, body {
-      height: 100%;
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #181e30;
+      height: 100%;
+      background-color: #000;
     }
-    body {
-      width: 100vw;
-      height: 100vh;
-      touch-action: none;
+
+    canvas {
+      display: block;
     }
-    #container {
-      width: 100vw;
-      height: 100vh;
-      position: fixed;
-      top: 0; left: 0;
-      overflow: hidden;
-      z-index: 1;
-    }
-    .centered-title {
+
+    #info {
       position: absolute;
-      top: 5vw;
-      width: 100vw;
-      text-align: center;
-      font-family: 'Segoe UI', Arial, sans-serif;
-      color: #f5f7fa;
-      font-size: 5vw;
-      letter-spacing: 0.03em;
-      text-shadow: 0 2px 20px #000a;
-      pointer-events: none;
-      user-select: none;
-      z-index: 10;
-      text-transform: uppercase;
-      font-weight: 700;
-      opacity: 0.85;
-    }
-    @media (max-width: 600px) {
-      .centered-title {
-        font-size: 8vw;
-        top: 3vw;
-      }
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-family: sans-serif;
+      z-index: 1;
     }
   </style>
 </head>
 <body>
-  <div id="container"></div>
-  <div class="centered-title">3D Torus Playground</div>
-  <script src="https://unpkg.com/three@0.154.0/build/three.min.js"></script>
+  <div id="info">🌐 Drag to rotate the sphere</div>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
   <script>
-    // --- SETUP ---
-    let scene, camera, renderer, torus, glow, container;
-    let width = window.innerWidth, height = window.innerHeight;
+    let scene, camera, renderer, sphere, isUserInteracting = false;
+    let lon = 0, lat = 0, phi = 0, theta = 0;
+    let onPointerDownPointerX = 0, onPointerDownPointerY = 0;
+    let onPointerDownLon = 0, onPointerDownLat = 0;
 
-    // Mouse/touch interaction variables
-    let isDragging = false;
-    let lastX = 0, lastY = 0;
-    let targetRotY = 0, targetRotX = 0;
-    let currentRotY = 0, currentRotX = 0;
+    init();
+    animate();
 
-    // Responsive
-    function resize() {
-      width = window.innerWidth;
-      height = window.innerHeight;
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height, false);
+    function init() {
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 3;
+
+      const geometry = new THREE.SphereGeometry(1, 64, 64);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x0077ff,
+        metalness: 0.5,
+        roughness: 0.2,
+        emissive: 0x111111,
+        side: THREE.DoubleSide,
+      });
+
+      sphere = new THREE.Mesh(geometry, material);
+      scene.add(sphere);
+
+      const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+      directionalLight.position.set(5, 5, 5);
+      scene.add(directionalLight);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      document.body.appendChild(renderer.domElement);
+
+      // Mouse events
+      document.addEventListener('mousedown', onPointerStart, false);
+      document.addEventListener('mousemove', onPointerMove, false);
+      document.addEventListener('mouseup', onPointerUp, false);
+
+      // Touch events
+      document.addEventListener('touchstart', onTouchStart, false);
+      document.addEventListener('touchmove', onTouchMove, false);
+      document.addEventListener('touchend', onPointerUp, false);
+
+      window.addEventListener('resize', onWindowResize, false);
     }
 
-    // --- THREE.JS SCENE ---
-    container = document.getElementById('container');
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setClearColor(0x181e30, 1);
-    renderer.setSize(width, height, false);
-    container.appendChild(renderer.domElement);
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
 
-    scene = new THREE.Scene();
+    function onPointerStart(event) {
+      isUserInteracting = true;
+      onPointerDownPointerX = event.clientX;
+      onPointerDownPointerY = event.clientY;
+      onPointerDownLon = lon;
+      onPointerDownLat = lat;
+    }
 
-    camera = new THREE.PerspectiveCamera(
-      55, width / height, 0.1, 100
-    );
-    camera.position.set(0, 0, 5);
-
-    // Lights
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambient);
-
-    const point = new THREE.PointLight(0x66ccff, 1.2, 100);
-    point.position.set(10, 12, 12);
-    scene.add(point);
-
-    // Torus geometry/material
-    const torusGeometry = new THREE.TorusGeometry(1, 0.36, 32, 160);
-    const torusMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x6699ff,
-      metalness: 0.5,
-      roughness: 0.15,
-      transmission: 0.6,   // glassy
-      thickness: 0.4,
-      clearcoat: 0.8,
-      clearcoatRoughness: 0.15,
-      iridescence: 0.2,
-      sheen: 0.4,
-      sheenColor: new THREE.Color(0xffffff),
-      emissive: 0x2244ff,
-      emissiveIntensity: 0.10,
-      reflectivity: 0.7,
-      envMapIntensity: 1,
-    });
-
-    torus = new THREE.Mesh(torusGeometry, torusMaterial);
-    torus.castShadow = false;
-    torus.receiveShadow = false;
-    scene.add(torus);
-
-    // Glowing outline (using another torus with basic material)
-    const glowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x00ffff,
-      transparent: true,
-      opacity: 0.20,
-      side: THREE.BackSide
-    });
-    glow = new THREE.Mesh(
-      new THREE.TorusGeometry(1.12, 0.45, 32, 160),
-      glowMaterial
-    );
-    scene.add(glow);
-
-    // --- INTERACTION HANDLERS ---
-    function getEventPos(e) {
-      if (e.touches && e.touches.length) {
-        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      } else {
-        return { x: e.clientX, y: e.clientY };
+    function onPointerMove(event) {
+      if (isUserInteracting) {
+        lon = (onPointerDownPointerX - event.clientX) * 0.1 + onPointerDownLon;
+        lat = (event.clientY - onPointerDownPointerY) * 0.1 + onPointerDownLat;
       }
     }
 
-    function onPointerDown(e) {
-      isDragging = true;
-      const pos = getEventPos(e);
-      lastX = pos.x;
-      lastY = pos.y;
-      e.preventDefault();
+    function onPointerUp() {
+      isUserInteracting = false;
     }
 
-    function onPointerMove(e) {
-      if (!isDragging) return;
-      const pos = getEventPos(e);
-      const dx = (pos.x - lastX) / width * Math.PI * 1.2; // scale rotation
-      const dy = (pos.y - lastY) / height * Math.PI * 1.2;
-      targetRotY += dx;
-      targetRotX += dy;
-      lastX = pos.x;
-      lastY = pos.y;
-      e.preventDefault();
+    function onTouchStart(event) {
+      if (event.touches.length === 1) {
+        onPointerStart(event.touches[0]);
+      }
     }
 
-    function onPointerUp(e) {
-      isDragging = false;
-      e.preventDefault();
+    function onTouchMove(event) {
+      if (event.touches.length === 1) {
+        onPointerMove(event.touches[0]);
+      }
     }
 
-    // Desktop
-    renderer.domElement.addEventListener('mousedown', onPointerDown, false);
-    window.addEventListener('mousemove', onPointerMove, false);
-    window.addEventListener('mouseup', onPointerUp, false);
-
-    // Touch
-    renderer.domElement.addEventListener('touchstart', onPointerDown, { passive: false });
-    window.addEventListener('touchmove', onPointerMove, { passive: false });
-    window.addEventListener('touchend', onPointerUp, { passive: false });
-
-    window.addEventListener('resize', resize);
-
-    // --- ANIMATION LOOP ---
-    let startTime = performance.now();
     function animate() {
       requestAnimationFrame(animate);
-
-      // Animate background color
-      const t = (performance.now() - startTime) * 0.001;
-      const hue = (0.6 + 0.10 * Math.sin(t * 0.7)) % 1;
-      const bg = new THREE.Color().setHSL(hue, 0.38, 0.13 + 0.03 * Math.cos(t*0.8));
-      renderer.setClearColor(bg, 1);
-
-      // Animate torus color
-      const pulse = 0.40 + 0.25 * Math.sin(t * 2.4);
-      torus.material.color.setHSL(0.58 + 0.10 * Math.sin(t * 1.1), 0.72, pulse);
-      torus.material.emissive.setHSL(0.6, 0.8, 0.25 + 0.1 * Math.cos(t * 1.7));
-
-      // Animate glow
-      glow.material.opacity = 0.15 + 0.10 * Math.abs(Math.cos(t * 1.6));
-      glow.material.color.setHSL(0.52 + 0.08 * Math.sin(t * 1.5), 0.95, 0.51);
-
-      // Smooth rotation (lerp)
-      currentRotY += (targetRotY - currentRotY) * 0.15;
-      currentRotX += (targetRotX - currentRotX) * 0.15;
-      currentRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, currentRotX)); // clamp up/down
-
-      torus.rotation.y = currentRotY;
-      torus.rotation.x = currentRotX;
-      glow.rotation.copy(torus.rotation);
-
-      // Idle rotation if not dragging
-      if (!isDragging) {
-        targetRotY += 0.003;
-      }
-
+      update();
       renderer.render(scene, camera);
     }
 
-    resize();
-    animate();
+    function update() {
+      lat = Math.max(-85, Math.min(85, lat));
+      phi = THREE.MathUtils.degToRad(90 - lat);
+      theta = THREE.MathUtils.degToRad(lon);
+
+      sphere.rotation.y += 0.002; // Auto rotate
+
+      camera.position.x = 3 * Math.sin(phi) * Math.cos(theta);
+      camera.position.y = 3 * Math.cos(phi);
+      camera.position.z = 3 * Math.sin(phi) * Math.sin(theta);
+      camera.lookAt(scene.position);
+    }
   </script>
 </body>
 </html>
