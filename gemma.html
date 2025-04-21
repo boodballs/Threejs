@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Scene</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: sans-serif;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out; /* Optional: fade out effect */
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">Loading...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // Initialize scene, camera, and renderer
+        let scene, camera, renderer;
+
+        // Interactive objects
+        let cube, sphere, torus;
+
+        // Mouse/Touch controls
+        let controls;
+
+        // Loading Manager
+        const loadingManager = new THREE.LoadingManager(() => {
+            // Callback when all assets are loaded (or immediately if none are managed)
+            const loadingScreen = document.getElementById('loadingScreen');
+            loadingScreen.style.opacity = '0'; // Start fade out
+            // Use setTimeout to remove after fade-out transition completes
+            setTimeout(() => {
+                loadingScreen.style.display = 'none'; // Hide loading screen
+            }, 500); // Match the transition duration in CSS
+            
+            // Start animation loop ONLY after everything is set up and loaded
+            animate(); 
+        });
+
+        // Loading Progress (optional - Note: may not show progress if no assets are loaded via the manager)
+        const progressBar = document.getElementById('loadingScreen');
+        loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+            // Improved progress text
+            progressBar.textContent = 'Loading: ' + Math.round(itemsLoaded / itemsTotal * 100) + '%';
+        };
+        loadingManager.onError = function (url) {
+            console.error('There was an error loading ' + url);
+            progressBar.textContent = 'Error loading assets. Check console.';
+        };
+        
+        function init() {
+            // FIX 1: Initialize scene FIRST
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x333333);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({antialias: true});
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.setPixelRatio(window.devicePixelRatio); // Improve rendering on high-resolution displays
+            document.body.appendChild(renderer.domElement);
+
+            // Objects - Now it's safe to call these as `scene` exists
+            cube = createCube();
+            sphere = createSphere();
+            torus = createTorus();
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x444444); // Soft ambient light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Increased intensity slightly
+            directionalLight.position.set(1, 1.5, 1); // Adjust light position
+            directionalLight.castShadow = true;
+            // Optional: Configure shadow camera for better quality/performance
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50; 
+            scene.add(directionalLight);
+
+            // Add a ground plane to receive shadows (optional but good for visuals)
+            const planeGeometry = new THREE.PlaneGeometry(20, 20);
+            const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
+            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.rotation.x = -Math.PI / 2; // Rotate it to be horizontal
+            plane.position.y = -1.5; // Position it below the objects
+            plane.receiveShadow = true; // Allow it to receive shadows
+            scene.add(plane);
+
+
+            // Controls - Ensure OrbitControls script is loaded before this runs
+            // FIX 2 is handled by adding the script tag in the HTML <head>
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Add damping for smoother movement
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false; // Keep panning relative to origin
+            // Adjust angle limits slightly if needed (using radians)
+            controls.minDistance = 2; // Prevent zooming too close
+            controls.maxDistance = 20; // Prevent zooming too far out
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent looking straight down or flipping under
+
+
+            // Event Listeners for resize handling
+            window.addEventListener('resize', onWindowResize);
+            
+            // --- Important: We don't call animate() here anymore. ---
+            // The LoadingManager's onLoad callback will start the animation loop.
+        }
+
+
+        function createCube() {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.5, metalness: 0.5 });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.x = -2;
+            mesh.castShadow = true;
+            mesh.receiveShadow = false; // Cubes usually don't receive shadows on themselves
+            scene.add(mesh); // Safe now, scene exists
+            mesh.userData = { clickable: true };
+            return mesh;
+        }
+
+        function createSphere() {
+            const geometry = new THREE.SphereGeometry(0.7, 32, 32);
+            const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.3, metalness: 0.6 });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.x = 0;
+            mesh.castShadow = true;
+            mesh.receiveShadow = false; 
+            scene.add(mesh); // Safe now
+            mesh.userData = { clickable: true };
+            return mesh;
+        }
+
+        function createTorus() {
+            const geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100); // Adjusted segments for potentially smoother look
+            const material = new THREE.MeshStandardMaterial({ color: 0x0000ff, roughness: 0.7, metalness: 0.2 });
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.x = 2;
+            mesh.castShadow = true;
+            mesh.receiveShadow = false; 
+            scene.add(mesh); // Safe now
+            mesh.userData = { clickable: true };
+            return mesh;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate); // Request next frame
+            
+            controls.update(); // Update OrbitControls (needed if enableDamping is true)
+
+            // Rotate objects for animation
+            const delta = 0.01; // Use a constant delta or ideally THREE.Clock for frame-rate independence
+            if (cube) cube.rotation.x += delta;
+            if (cube) cube.rotation.y += delta;
+            if (sphere) sphere.rotation.y += delta; // Changed rotation axis for variety
+            if (torus) torus.rotation.x -= delta;
+            if (torus) torus.rotation.y -= delta * 0.5;
+
+
+            renderer.render(scene, camera); // Render the scene
+        }
+
+        // Initialize the scene setup
+        init();
+
+        // Note: The loadingManager will automatically call its 'onLoad' callback 
+        // (which starts animate()) once the JS engine reaches it, 
+        // even if no assets were explicitly loaded *through* the manager.
+
+    </script>
+</body>
+</html>
