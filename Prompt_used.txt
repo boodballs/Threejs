@@ -1,0 +1,1 @@
+Build a cool animated 3js app that has mouse/touch interactions in html that works well for all devices. Give me the full code
