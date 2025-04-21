@@ -3,38 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Interactive 3D Sphere - Three.js</title>
+  <title>Electric Luigi Portal</title>
   <style>
     html, body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      height: 100%;
-      background-color: #000;
+      background: black;
     }
 
     canvas {
       display: block;
     }
-
-    #info {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      color: white;
-      font-family: sans-serif;
-      z-index: 1;
-    }
   </style>
 </head>
 <body>
-  <div id="info">🌐 Drag to rotate the sphere</div>
+  <!-- Three.js & OrbitControls via CDN (for simplicity) -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.min.js"></script>
+
   <script>
-    let scene, camera, renderer, sphere, isUserInteracting = false;
-    let lon = 0, lat = 0, phi = 0, theta = 0;
-    let onPointerDownPointerX = 0, onPointerDownPointerY = 0;
-    let onPointerDownLon = 0, onPointerDownLat = 0;
+    let scene, camera, renderer, controls, imagePlane, particles = [];
+
+    const loader = new THREE.TextureLoader();
+    const imageURL = './electric.jpg'; // Image in the same folder as this HTML file
 
     init();
     animate();
@@ -42,44 +34,59 @@
     function init() {
       scene = new THREE.Scene();
 
+      // Camera
       camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.z = 3;
 
-      const geometry = new THREE.SphereGeometry(1, 64, 64);
-      const material = new THREE.MeshStandardMaterial({
-        color: 0x0077ff,
-        metalness: 0.5,
-        roughness: 0.2,
-        emissive: 0x111111,
-        side: THREE.DoubleSide,
-      });
-
-      sphere = new THREE.Mesh(geometry, material);
-      scene.add(sphere);
-
-      const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
-      scene.add(ambientLight);
-
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-      directionalLight.position.set(5, 5, 5);
-      scene.add(directionalLight);
-
+      // Renderer
       renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
       document.body.appendChild(renderer.domElement);
 
-      // Mouse events
-      document.addEventListener('mousedown', onPointerStart, false);
-      document.addEventListener('mousemove', onPointerMove, false);
-      document.addEventListener('mouseup', onPointerUp, false);
+      // Controls
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 0.6;
 
-      // Touch events
-      document.addEventListener('touchstart', onTouchStart, false);
-      document.addEventListener('touchmove', onTouchMove, false);
-      document.addEventListener('touchend', onPointerUp, false);
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambientLight);
 
-      window.addEventListener('resize', onWindowResize, false);
+      const pointLight = new THREE.PointLight(0x00ffff, 1.5, 100);
+      pointLight.position.set(0, 0, 5);
+      scene.add(pointLight);
+
+      // Load the texture and apply to a plane
+      loader.load(imageURL, function(texture) {
+        const aspect = texture.image.height / texture.image.width;
+        const planeGeometry = new THREE.PlaneGeometry(2, 2 * aspect);
+        const planeMaterial = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+        imagePlane = new THREE.Mesh(planeGeometry, planeMaterial);
+        scene.add(imagePlane);
+      });
+
+      // Create particles
+      const particleCount = 150;
+      for (let i = 0; i < particleCount; i++) {
+        const particleGeo = new THREE.SphereGeometry(0.01, 8, 8);
+        const particleMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc });
+        const particle = new THREE.Mesh(particleGeo, particleMat);
+        particle.position.x = (Math.random() - 0.5) * 4;
+        particle.position.y = (Math.random() - 0.5) * 6;
+        particle.position.z = (Math.random() - 0.5) * 2;
+        particle.userData.velocity = {
+          x: (Math.random() - 0.5) * 0.01,
+          y: (Math.random() - 0.5) * 0.01,
+          z: (Math.random() - 0.5) * 0.01
+        };
+        scene.add(particle);
+        particles.push(particle);
+      }
+
+      window.addEventListener('resize', onWindowResize);
     }
 
     function onWindowResize() {
@@ -88,54 +95,23 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function onPointerStart(event) {
-      isUserInteracting = true;
-      onPointerDownPointerX = event.clientX;
-      onPointerDownPointerY = event.clientY;
-      onPointerDownLon = lon;
-      onPointerDownLat = lat;
-    }
-
-    function onPointerMove(event) {
-      if (isUserInteracting) {
-        lon = (onPointerDownPointerX - event.clientX) * 0.1 + onPointerDownLon;
-        lat = (event.clientY - onPointerDownPointerY) * 0.1 + onPointerDownLat;
-      }
-    }
-
-    function onPointerUp() {
-      isUserInteracting = false;
-    }
-
-    function onTouchStart(event) {
-      if (event.touches.length === 1) {
-        onPointerStart(event.touches[0]);
-      }
-    }
-
-    function onTouchMove(event) {
-      if (event.touches.length === 1) {
-        onPointerMove(event.touches[0]);
-      }
-    }
-
     function animate() {
       requestAnimationFrame(animate);
-      update();
+      controls.update();
+
+      // Move particles
+      particles.forEach(p => {
+        p.position.x += p.userData.velocity.x;
+        p.position.y += p.userData.velocity.y;
+        p.position.z += p.userData.velocity.z;
+
+        // Bounce within bounds
+        if (Math.abs(p.position.x) > 2) p.userData.velocity.x *= -1;
+        if (Math.abs(p.position.y) > 3) p.userData.velocity.y *= -1;
+        if (Math.abs(p.position.z) > 1) p.userData.velocity.z *= -1;
+      });
+
       renderer.render(scene, camera);
-    }
-
-    function update() {
-      lat = Math.max(-85, Math.min(85, lat));
-      phi = THREE.MathUtils.degToRad(90 - lat);
-      theta = THREE.MathUtils.degToRad(lon);
-
-      sphere.rotation.y += 0.002; // Auto rotate
-
-      camera.position.x = 3 * Math.sin(phi) * Math.cos(theta);
-      camera.position.y = 3 * Math.cos(phi);
-      camera.position.z = 3 * Math.sin(phi) * Math.sin(theta);
-      camera.lookAt(scene.position);
     }
   </script>
 </body>
