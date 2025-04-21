@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Scene with Three.js</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading 3D Scene...</div>
+    <!-- Import Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Global variables for Three.js components
+        let scene, camera, renderer, cubes = [];
+        let isDragging = false, previousMousePosition = { x: 0, y: 0 };
+        let targetRotation = { x: 0, y: 0 };
+        let windowHalfX = window.innerWidth / 2;
+        let windowHalfY = window.innerHeight / 2;
+
+        // Initialize the application
+        function init() {
+            try {
+                const loadingElement = document.getElementById('loading');
+                loadingElement.style.display = 'block';
+
+                // Scene setup
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x1a1a1a);
+
+                // Camera setup with responsive field of view
+                camera = new THREE.PerspectiveCamera(
+                    75,
+                    window.innerWidth / window.innerHeight,
+                    0.1,
+                    1000
+                );
+                camera.position.z = 5;
+
+                // Renderer setup with performance optimizations
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                // Enable pixel ratio limiting for better performance on high-DPI displays
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                document.body.appendChild(renderer.domElement);
+
+                // Add ambient light for basic illumination
+                const ambientLight = new THREE.AmbientLight(0x404040);
+                scene.add(ambientLight);
+
+                // Add directional light for dynamic shadows
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+                directionalLight.position.set(0, 1, 1);
+                scene.add(directionalLight);
+
+                // Create three interactive cubes with basic materials
+                const cubePositions = [-2, 0, 2];
+                cubePositions.forEach(pos => {
+                    const geometry = new THREE.BoxGeometry(1, 1, 1);
+                    // Use basic material for better performance (no complex shaders)
+                    const material = new THREE.MeshBasicMaterial({
+                        color: new THREE.Color(Math.random(), Math.random(), Math.random()),
+                        wireframe: false
+                    });
+                    const cube = new THREE.Mesh(geometry, material);
+                    cube.position.x = pos;
+                    cube.userData.isInteractive = true;
+                    cubes.push(cube);
+                    scene.add(cube);
+                });
+
+                // Event listeners for mouse and touch interactions
+                document.addEventListener('mousedown', onMouseDown, false);
+                document.addEventListener('mousemove', onMouseMove, false);
+                document.addEventListener('mouseup', onMouseUp, false);
+                document.addEventListener('touchstart', onTouchStart, false);
+                document.addEventListener('touchmove', onTouchMove, false);
+                document.addEventListener('touchend', onTouchEnd, false);
+                window.addEventListener('resize', onWindowResize, false);
+
+                loadingElement.style.display = 'none';
+                animate();
+            } catch (error) {
+                console.error('Initialization failed:', error);
+                document.getElementById('loading').textContent = 'Error loading 3D scene. Please refresh.';
+            }
+        }
+
+        // Handle window resize for responsive design
+        function onWindowResize() {
+            windowHalfX = window.innerWidth / 2;
+            windowHalfY = window.innerHeight / 2;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Mouse interaction handlers
+        function onMouseDown(event) {
+            event.preventDefault();
+            isDragging = true;
+            previousMousePosition = {
+                x: event.clientX - windowHalfX,
+                y: event.clientY - windowHalfY
+            };
+        }
+
+        function onMouseMove(event) {
+            if (isDragging) {
+                const deltaMove = {
+                    x: (event.clientX - windowHalfX) - previousMousePosition.x,
+                    y: (event.clientY - windowHalfY) - previousMousePosition.y
+                };
+                targetRotation.y += deltaMove.x * 0.005;
+                targetRotation.x += deltaMove.y * 0.005;
+                previousMousePosition = {
+                    x: event.clientX - windowHalfX,
+                    y: event.clientY - windowHalfY
+                };
+            }
+        }
+
+        function onMouseUp() {
+            isDragging = false;
+        }
+
+        // Touch interaction handlers for mobile devices
+        function onTouchStart(event) {
+            event.preventDefault();
+            if (event.touches.length === 1) {
+                isDragging = true;
+                previousMousePosition = {
+                    x: event.touches[0].clientX - windowHalfX,
+                    y: event.touches[0].clientY - windowHalfY
+                };
+            }
+        }
+
+        function onTouchMove(event) {
+            event.preventDefault();
+            if (isDragging && event.touches.length === 1) {
+                const deltaMove = {
+                    x: (event.touches[0].clientX - windowHalfX) - previousMousePosition.x,
+                    y: (event.touches[0].clientY - windowHalfY) - previousMousePosition.y
+                };
+                targetRotation.y += deltaMove.x * 0.005;
+                targetRotation.x += deltaMove.y * 0.005;
+                previousMousePosition = {
+                    x: event.touches[0].clientX - windowHalfX,
+                    y: event.touches[0].clientY - windowHalfY
+                };
+            }
+        }
+
+        function onTouchEnd() {
+            isDragging = false;
+        }
+
+        // Animation loop with performance optimizations
+        function animate() {
+            // Use requestAnimationFrame for optimal performance
+            requestAnimationFrame(animate);
+
+            // Update cube rotations with smooth damping
+            targetRotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotation.x));
+            scene.rotation.x += (targetRotation.x - scene.rotation.x) * 0.1;
+            scene.rotation.y += (targetRotation.y - scene.rotation.y) * 0.1;
+
+            // Animate individual cubes
+            cubes.forEach((cube, index) => {
+                cube.rotation.x += 0.01 * (index + 1);
+                cube.rotation.y += 0.005 * (index + 1);
+            });
+
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        // Start the application
+        window.onload = init;
+    </script>
+</body>
+</html>
