@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Responsive 3D Scene</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: white;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading...</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Initialize the scene, camera, and renderer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Loading indicator
+        const loadingIndicator = document.getElementById('loading');
+
+        // Add lights to the scene
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // Create 3D objects
+        const geometry1 = new THREE.BoxGeometry(1, 1, 1);
+        const material1 = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+        const cube1 = new THREE.Mesh(geometry1, material1);
+        cube1.position.set(-2, 0, 0);
+        scene.add(cube1);
+
+        const geometry2 = new THREE.SphereGeometry(0.5, 32, 32);
+        const material2 = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+        const sphere = new THREE.Mesh(geometry2, material2);
+        sphere.position.set(0, 0, 0);
+        scene.add(sphere);
+
+        const geometry3 = new THREE.ConeGeometry(0.5, 1, 32);
+        const material3 = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+        const cone = new THREE.Mesh(geometry3, material3);
+        cone.position.set(2, 0, 0);
+        scene.add(cone);
+
+        // Set camera position
+        camera.position.z = 5;
+
+        // Mouse/touch controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.25;
+        controls.enableZoom = true;
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Rotate objects
+            cube1.rotation.x += 0.01;
+            cube1.rotation.y += 0.01;
+
+            sphere.rotation.x += 0.01;
+            sphere.rotation.y += 0.01;
+
+            cone.rotation.x += 0.01;
+            cone.rotation.y += 0.01;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Hide loading indicator and start animation
+        loadingIndicator.style.display = 'none';
+        animate();
+    </script>
+</body>
+</html>
