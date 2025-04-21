@@ -2,246 +2,157 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Particle Wave Animation</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"> <!-- Added user-scalable=no for better mobile experience -->
+    <title>Interactive Animated 3D Cube - Three.js</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #000;
-        }
-        canvas {
-            display: block;
-        }
-        .info {
+        body { margin: 0; overflow: hidden; background-color: #111; } /* Remove margin, hide scrollbars, set background */
+        canvas { display: block; } /* Prevent potential spacing issues */
+        #info { /* Basic info text styling */
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: white;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            color: #ffffff;
             font-family: Arial, sans-serif;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 5px;
-            user-select: none;
+            font-size: 14px;
+            z-index: 100; /* Ensure it's above the canvas */
         }
     </style>
 </head>
 <body>
-    <div class="info">Move your mouse to interact with the particles</div>
+
+    <div id="info">Drag to rotate, Scroll/Pinch to zoom, Right-Click/Two-Finger drag to pan</div>
+
+    <!-- Import Three.js core and OrbitControls -->
+    <!-- Using unpkg CDN. Ensure you have an internet connection. -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- Your Three.js application code -->
     <script type="module">
-        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js';
-        import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/controls/OrbitControls.js';
+        // Import necessary components
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js'; // Import OrbitControls
 
-        // Initialize scene
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 30;
+        // Declare variables accessible in multiple functions
+        let scene, camera, renderer, cube, controls;
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        document.body.appendChild(renderer.domElement);
+        // Initialization function
+        function init() {
+            // 1. Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a2a); // Slightly different dark background
 
-        // Add orbit controls
-        const controls = new OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.rotateSpeed = 0.5;
+            // 2. Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.5, 5); // Position camera slightly higher and back
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040);
-        scene.add(ambientLight);
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI displays
+            document.body.appendChild(renderer.domElement);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(1, 1, 1);
-        scene.add(directionalLight);
+            // 4. Geometry (Cube)
+            const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
 
-        // Create particles
-        const particleCount = window.innerWidth < 600 ? 2000 : 5000;
-        const particles = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-        const colors = new Float32Array(particleCount * 3);
-        const sizes = new Float32Array(particleCount);
-
-        const colorPalette = [
-            new THREE.Color(0xff5e62),
-            new THREE.Color(0xff9966),
-            new THREE.Color(0xffcc33),
-            new THREE.Color(0x00d2ff),
-            new THREE.Color(0x4facfe)
-        ];
-
-        // Initialize arrays for animation
-        const particleData = [];
-
-        for (let i = 0; i < particleCount; i++) {
-            // Position
-            const x = (Math.random() - 0.5) * 50;
-            const y = (Math.random() - 0.5) * 50;
-            const z = (Math.random() - 0.5) * 50;
-            
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = z;
-            
-            // Store original positions for wave animation
-            particleData.push({
-                originalX: x,
-                originalY: y,
-                originalZ: z,
-                phaseX: Math.random() * Math.PI * 2,
-                phaseY: Math.random() * Math.PI * 2,
-                phaseZ: Math.random() * Math.PI * 2,
-                amplitude: 0.3 + Math.random() * 0.5
+            // 5. Material (More interesting)
+            // Using MeshPhongMaterial for distinct highlights
+            const material = new THREE.MeshPhongMaterial({
+                color: 0x44aaff,    // A bright blue
+                shininess: 100,     // How shiny the highlight is
+                specular: 0xaaaaaa // Color of the highlight
             });
 
-            // Color
-            const color = colorPalette[Math.floor(Math.random() * colorPalette.length)];
-            colors[i * 3] = color.r;
-            colors[i * 3 + 1] = color.g;
-            colors[i * 3 + 2] = color.b;
-            
-            // Size
-            sizes[i] = Math.random() * 0.5 + 0.1;
+            // 6. Mesh (Cube)
+            cube = new THREE.Mesh(geometry, material);
+            cube.position.y = 0.5; // Lift the cube slightly so it's not centered at the origin
+            scene.add(cube);
+
+            // Add a simple ground plane
+            const planeGeometry = new THREE.PlaneGeometry(10, 10);
+            const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 });
+            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.rotation.x = -Math.PI / 2; // Rotate the plane to be horizontal
+            plane.position.y = -0.75; // Position it below the cube's bottom face
+            scene.add(plane);
+
+
+            // 7. Lighting
+            // Ambient Light
+            const ambientLight = new THREE.AmbientLight(0x404040, 1.0); // Soft white light
+            scene.add(ambientLight);
+
+            // Directional Light (for highlights and shadows)
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            // Point Light (adds more dynamic lighting)
+            const pointLight = new THREE.PointLight(0xffaa00, 1, 10); // Orange-ish light
+            pointLight.position.set(-5, 3, -3);
+            scene.add(pointLight);
+            // Optional: Add a helper to visualize the point light
+            // const pointLightHelper = new THREE.PointLightHelper(pointLight, 0.5);
+            // scene.add(pointLightHelper);
+
+
+            // 8. Controls (OrbitControls)
+            // Pass the camera and the renderer's DOM element
+            controls = new OrbitControls(camera, renderer.domElement);
+
+            // Configuration for smoother interaction
+            controls.enableDamping = true; // An animation loop is required when either damping or auto-rotation are enabled
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false; // If true, panning orthogonal to camera direction; if false, panning parallel to ground plane
+            controls.minDistance = 2; // Minimum zoom distance
+            controls.maxDistance = 15; // Maximum zoom distance
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent camera going below the ground slightly
+            controls.target.set(0, 0.5, 0); // Set the point the camera orbits around (the cube's position)
+            controls.update(); // Must be called after any manual changes to the camera's transform or controls' target
+
+            // Handle window resizing
+            window.addEventListener('resize', onWindowResize, false);
         }
 
-        particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        particles.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-        // Particle shader material
-        const particleMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                time: { value: 0 },
-                mousePosition: { value: new THREE.Vector2(0, 0) }
-            },
-            vertexShader: `
-                attribute float size;
-                varying vec3 vColor;
-                uniform float time;
-                uniform vec2 mousePosition;
-                
-                void main() {
-                    vColor = color;
-                    
-                    // Calculate distance from mouse
-                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-                    float distToMouse = distance(
-                        vec2(worldPosition.x, worldPosition.y), 
-                        mousePosition
-                    );
-                    
-                    // Add subtle pulse based on time
-                    float pulse = sin(time * 2.0 + distToMouse * 0.5) * 0.5 + 0.5;
-                    
-                    // Particle size affected by mouse proximity and pulse
-                    float particleSize = size * (1.0 + pulse * 0.3);
-                    if (distToMouse < 10.0) {
-                        particleSize *= 1.0 + (10.0 - distToMouse) * 0.05;
-                    }
-                    
-                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                    gl_PointSize = particleSize * (300.0 / -mvPosition.z);
-                    gl_Position = projectionMatrix * mvPosition;
-                }
-            `,
-            fragmentShader: `
-                varying vec3 vColor;
-                
-                void main() {
-                    // Create circular particles
-                    float distFromCenter = length(gl_PointCoord - vec2(0.5));
-                    if (distFromCenter > 0.5) {
-                        discard;
-                    }
-                    
-                    // Smooth edges
-                    float alpha = 1.0 - smoothstep(0.4, 0.5, distFromCenter);
-                    gl_FragColor = vec4(vColor, alpha);
-                }
-            `,
-            transparent: true,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            vertexColors: true
-        });
-
-        const particleSystem = new THREE.Points(particles, particleMaterial);
-        scene.add(particleSystem);
-
-        // Mouse movement tracking
-        const mouse = new THREE.Vector2(0, 0);
-        const windowHalfX = window.innerWidth / 2;
-        const windowHalfY = window.innerHeight / 2;
-
-        function onMouseMove(event) {
-            mouse.x = (event.clientX - windowHalfX);
-            mouse.y = (event.clientY - windowHalfY) * -1;
-            
-            particleMaterial.uniforms.mousePosition.value.set(
-                mouse.x * 0.05, 
-                mouse.y * 0.05
-            );
-        }
-
-        document.addEventListener('mousemove', onMouseMove, false);
-        
-        // Touch support for mobile
-        function onTouchMove(event) {
-            if (event.touches.length > 0) {
-                mouse.x = (event.touches[0].clientX - windowHalfX);
-                mouse.y = (event.touches[0].clientY - windowHalfY) * -1;
-                
-                particleMaterial.uniforms.mousePosition.value.set(
-                    mouse.x * 0.05, 
-                    mouse.y * 0.05
-                );
-            }
-        }
-        
-        document.addEventListener('touchmove', onTouchMove, false);
-
-        // Animation loop
-        const clock = new THREE.Clock();
-        
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            const time = clock.getElapsedTime();
-            particleMaterial.uniforms.time.value = time;
-            
-            // Update particle positions for wave effect
-            const positions = particles.attributes.position.array;
-            
-            for (let i = 0; i < particleCount; i++) {
-                const data = particleData[i];
-                
-                positions[i * 3] = data.originalX + 
-                    Math.sin(time * 0.7 + data.phaseX) * data.amplitude;
-                positions[i * 3 + 1] = data.originalY + 
-                    Math.sin(time * 0.6 + data.phaseY) * data.amplitude;
-                positions[i * 3 + 2] = data.originalZ + 
-                    Math.sin(time * 0.5 + data.phaseZ) * data.amplitude;
-            }
-            
-            particles.attributes.position.needsUpdate = true;
-            
-            controls.update();
-            renderer.render(scene, camera);
-        }
-
-        // Handle window resize
+        // Function to handle window resize events
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Update pixel ratio on resize too
         }
 
-        window.addEventListener('resize', onWindowResize, false);
-        
-        // Start animation
+        // Animation loop function
+        function animate(time) { // time parameter provided by requestAnimationFrame
+            // Request the next frame
+            requestAnimationFrame(animate);
+
+            // --- Animation ---
+            // Subtle cube rotation (optional, can be nice)
+            const speed = 0.0005;
+            cube.rotation.x = time * speed;
+            cube.rotation.y = time * speed * 1.5; // Rotate slightly faster on Y
+
+            // --- Update Controls ---
+            // Required if controls.enableDamping or controls.autoRotate are set to true
+            controls.update();
+
+            // Render the scene
+            renderer.render(scene, camera);
+        }
+
+        // --- Start the application ---
+        init();
         animate();
+        // --- End Start ---
+
     </script>
 </body>
 </html>
