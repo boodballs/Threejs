@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM 3D Visualization Hub</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            min-height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            color: #1a1a1a;
+            margin-bottom: 30px;
+        }
+        .llm-list {
+            list-style: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Responsive grid */
+            gap: 20px;
+            width: 80%;
+            max-width: 1200px;
+        }
+        .llm-item a {
+            display: block;
+            background-color: #fff;
+            color: #007bff;
+            padding: 20px;
+            text-decoration: none;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 1.1em;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .llm-item a:hover {
+            background-color: #e9ecef;
+            color: #0056b3;
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        footer {
+            margin-top: auto; /* Pushes footer to the bottom */
+            padding: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Explore LLM Visualizations</h1>
+
+    <ul class="llm-list">
+        <li class="llm-item"><a href="gpt4.html">GPT-4 Series (OpenAI)</a></li>
+        <li class="llm-item"><a href="claude3.html">Claude 3 Series (Anthropic)</a></li>
+        <li class="llm-item"><a href="gemini2.html">Gemini 2 Series (Google)</a></li>
+        <li class="llm-item"><a href="llama3.html">Llama 3 Series (Meta AI)</a></li>
+        <li class="llm-item"><a href="mistral.html">Mistral Series (Mistral AI)</a></li>
+        <li class="llm-item"><a href="deepseek.html">DeepSeek Series (DeepSeek AI)</a></li>
+        <li class="llm-item"><a href="grok.html">Grok Series (xAI)</a></li>
+        <li class="llm-item"><a href="qwen.html">Qwen Series (Alibaba)</a></li>
+        <li class="llm-item"><a href="commandr.html">Command R Series (Cohere)</a></li>
+        <li class="llm-item"><a href="gemma.html">Gemma Series (Google)</a></li>
+    </ul>
+
+    <footer>
+        <p>Click on an LLM to see its interactive 3D representation.</p>
+        <p>Current Time: Monday, April 21, 2025 at 10:53:09 PM +03</p>
+    </footer>
+
+</body>
+</html>
+
