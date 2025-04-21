@@ -3,283 +3,241 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Geometric Scene</title>
+    <title>Simple 3D Scene</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            overflow: hidden;
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #111;
+            touch-action: none;
             font-family: Arial, sans-serif;
-            color: white;
         }
-        
-        #canvas-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+        canvas { 
+            display: block; 
         }
-        
-        #loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #111;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 10;
-        }
-        
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 5px solid #333;
-            border-top: 5px solid #4d88ff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        #ui {
-            position: fixed;
+        #info {
+            position: absolute;
             top: 10px;
             left: 10px;
-            z-index: 5;
+            color: white;
             background: rgba(0,0,0,0.5);
             padding: 10px;
             border-radius: 5px;
             user-select: none;
         }
-        
-        #fps {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            z-index: 5;
-            background: rgba(0,0,0,0.5);
-            padding: 5px;
-            border-radius: 3px;
-        }
-        
         #object-info {
-            position: fixed;
+            position: absolute;
             bottom: 20px;
             left: 20px;
+            color: white;
             background: rgba(0,0,0,0.6);
             padding: 15px;
             border-radius: 5px;
             max-width: 300px;
             opacity: 0;
             transition: opacity 0.3s;
-            z-index: 5;
-        }
-        
-        .hidden {
-            display: none !important;
         }
     </style>
 </head>
 <body>
-    <div id="loading">
-        <div class="spinner"></div>
-        <p>Loading 3D Scene...</p>
+    <div id="info">
+        <h3>Basic 3D Shapes</h3>
+        <p>Drag to rotate | Tap objects to interact</p>
     </div>
-    
-    <div id="canvas-container"></div>
-    
-    <div id="ui">
-        <h3>Geometric 3D Scene</h3>
-        <p>Drag to rotate | Scroll to zoom | Click objects to interact</p>
-    </div>
-    
-    <div id="fps">FPS: --</div>
     
     <div id="object-info">
         <h3 id="object-title">Object</h3>
-        <p id="object-desc">Description here</p>
+        <p id="object-desc">Description</p>
     </div>
-    
-    <!-- Load Three.js from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.148.0/examples/jsm/controls/OrbitControls.js"></script>
+
+    <!-- Only load the core Three.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.141.0/build/three.min.js"></script>
     
     <script>
-        // Main application logic
+        // Main application
         (function() {
-            // Scene variables
-            let scene, camera, renderer, controls;
+            // Scene elements
+            let scene, camera, renderer;
             let objects = [];
-            let lastTime = 0;
-            let frameCount = 0;
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            let sceneRotation = { x: 0, y: 0 };
             
-            // DOM elements
-            const container = document.getElementById('canvas-container');
-            const loading = document.getElementById('loading');
-            const fpsCounter = document.getElementById('fps');
-            const objectInfo = document.getElementById('object-info');
-            const objectTitle = document.getElementById('object-title');
-            const objectDesc = document.getElementById('object-desc');
-            
-            // Object information data
+            // Object data
             const objectData = {
-                cube: {
-                    title: "Rotating Cube",
-                    description: "This cube rotates on multiple axes. Click to change its color!"
+                'cube': {
+                    title: 'Colorful Cube',
+                    description: 'A cube that changes color when tapped.'
                 },
-                pyramid: {
-                    title: "Colorful Pyramid",
-                    description: "A tetrahedron with shimmering colors. Click to make it jump!"
+                'sphere': {
+                    title: 'Bouncing Sphere',
+                    description: 'A sphere that bounces when tapped.'
                 },
-                sphere: {
-                    title: "Pulsing Sphere",
-                    description: "This sphere gently pulses. Click to change its pulse pattern!"
+                'cylinder': {
+                    title: 'Spinning Cylinder',
+                    description: 'A cylinder that spins faster when tapped.'
                 }
             };
             
-            // Interaction handler
-            const raycaster = new THREE.Raycaster();
-            const mouse = new THREE.Vector2();
-            
-            // Check for mobile devices
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            
-            // Initialize the scene
+            // Initialize the application
             function init() {
-                // Create the scene
+                // Create scene
                 scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x1a1a2e);
                 
-                // Set up camera
+                // Create camera
                 camera = new THREE.PerspectiveCamera(
-                    75,
-                    window.innerWidth / window.innerHeight,
-                    0.1,
+                    70, 
+                    window.innerWidth / window.innerHeight, 
+                    0.1, 
                     1000
                 );
                 camera.position.z = 10;
                 
                 // Create renderer
-                renderer = new THREE.WebGLRenderer({ antialias: !isMobile });
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                renderer = new THREE.WebGLRenderer({ antialias: true });
                 renderer.setSize(window.innerWidth, window.innerHeight);
-                container.appendChild(renderer.domElement);
+                renderer.setClearColor(0x111122);
+                document.body.appendChild(renderer.domElement);
                 
-                // Add orbit controls
-                controls = new THREE.OrbitControls(camera, renderer.domElement);
-                controls.enableDamping = true;
-                controls.dampingFactor = 0.05;
-                
-                // Add lighting
-                addLights();
-                
-                // Add objects
-                createObjects();
-                
-                // Setup event listeners
-                window.addEventListener('resize', onWindowResize);
-                window.addEventListener('mousedown', onMouseDown);
-                window.addEventListener('touchstart', onTouchStart, { passive: false });
-                
-                // Hide loading screen and start animation
-                setTimeout(() => {
-                    loading.classList.add('hidden');
-                    animate();
-                }, 500);
-            }
-            
-            // Add lights to the scene
-            function addLights() {
-                // Ambient light for base illumination
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                // Add lights
+                const ambientLight = new THREE.AmbientLight(0x404040, 1);
                 scene.add(ambientLight);
                 
-                // Main directional light
-                const mainLight = new THREE.DirectionalLight(0xffffff, 1);
-                mainLight.position.set(10, 10, 10);
-                scene.add(mainLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(1, 1, 1);
+                scene.add(directionalLight);
                 
-                // Accent light from opposite direction
-                const accentLight = new THREE.DirectionalLight(0x0088ff, 0.5);
-                accentLight.position.set(-5, -2, -5);
-                scene.add(accentLight);
+                const backLight = new THREE.DirectionalLight(0x4466ff, 0.4);
+                backLight.position.set(-1, -1, -1);
+                scene.add(backLight);
+                
+                // Create objects
+                createObjects();
+                
+                // Add event listeners
+                window.addEventListener('resize', onWindowResize);
+                renderer.domElement.addEventListener('mousedown', onMouseDown);
+                renderer.domElement.addEventListener('mousemove', onMouseMove);
+                renderer.domElement.addEventListener('mouseup', onMouseUp);
+                renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+                renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+                renderer.domElement.addEventListener('touchend', onTouchEnd);
+                
+                // Start animation loop
+                animate();
             }
             
-            // Create interactive 3D objects
+            // Create the interactive 3D objects
             function createObjects() {
-                // 1. Create a cube
+                // 1. Create cube
                 const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
-                const cubeMaterial = new THREE.MeshPhongMaterial({
-                    color: 0x4d88ff,
-                    shininess: 30
+                const cubeMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x4488ff,
+                    shininess: 60
                 });
                 
                 const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
                 cube.position.set(-3, 0, 0);
                 cube.userData = {
                     type: 'cube',
-                    rotationSpeed: { x: 0.01, y: 0.02 },
-                    colors: [0x4d88ff, 0xff4d4d, 0x4dff88, 0xffdd4d],
-                    currentColorIndex: 0
+                    colors: [0x4488ff, 0xff4488, 0x88ff44, 0xffff44],
+                    colorIndex: 0,
+                    rotationSpeed: 0.01
                 };
                 scene.add(cube);
                 objects.push(cube);
                 
-                // 2. Create a pyramid (tetrahedron)
-                const pyramidGeometry = new THREE.TetrahedronGeometry(1.5);
-                const pyramidMaterial = new THREE.MeshPhongMaterial({
-                    color: 0xff4d4d,
-                    shininess: 50,
-                    specular: 0xffffff
-                });
-                
-                const pyramid = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
-                pyramid.position.set(3, 0, 0);
-                pyramid.userData = {
-                    type: 'pyramid',
-                    rotationSpeed: { x: 0.005, y: 0.01, z: 0.008 },
-                    jumping: false,
-                    jumpHeight: 1.5,
-                    jumpSpeed: 0.05,
-                    jumpProgress: 0,
-                    originalY: 0
-                };
-                scene.add(pyramid);
-                objects.push(pyramid);
-                
-                // 3. Create a sphere
-                const sphereGeometry = new THREE.SphereGeometry(1.2, 32, 32);
-                const sphereMaterial = new THREE.MeshPhongMaterial({
-                    color: 0x4dff88,
-                    shininess: 60,
-                    specular: 0x888888
+                // 2. Create sphere
+                const sphereGeometry = new THREE.SphereGeometry(1.5, 24, 24);
+                const sphereMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0xff4488,
+                    shininess: 30
                 });
                 
                 const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                sphere.position.set(0, 2.5, 0);
+                sphere.position.set(3, 0, 0);
                 sphere.userData = {
                     type: 'sphere',
-                    pulseSpeed: 0.03,
-                    pulseAmount: 0.2,
-                    pulseProgress: 0,
-                    pulsePattern: 'sine',
-                    patterns: ['sine', 'bounce', 'sharp']
+                    bouncing: false,
+                    originalY: 0,
+                    bounceHeight: 2,
+                    bounceSpeed: 0.05,
+                    bounceProgress: 0,
+                    rotationSpeed: 0.01
                 };
                 scene.add(sphere);
                 objects.push(sphere);
+                
+                // 3. Create cylinder
+                const cylinderGeometry = new THREE.CylinderGeometry(1, 1, 3, 16);
+                const cylinderMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x88ff44,
+                    shininess: 40
+                });
+                
+                const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+                cylinder.position.set(0, 3, 0);
+                cylinder.rotation.x = Math.PI / 4;
+                cylinder.userData = {
+                    type: 'cylinder',
+                    rotationSpeed: 0.01,
+                    originalSpeed: 0.01,
+                    fastSpeed: 0.05,
+                    spinning: false,
+                    spinTimer: 0
+                };
+                scene.add(cylinder);
+                objects.push(cylinder);
+            }
+            
+            // Update logic for each frame
+            function update() {
+                // Update each object
+                objects.forEach(object => {
+                    // Basic rotation for all objects
+                    object.rotation.x += object.userData.rotationSpeed;
+                    object.rotation.y += object.userData.rotationSpeed;
+                    
+                    // Object-specific updates
+                    if (object.userData.type === 'sphere' && object.userData.bouncing) {
+                        // Handle bouncing animation
+                        object.userData.bounceProgress += object.userData.bounceSpeed;
+                        
+                        if (object.userData.bounceProgress <= 1) {
+                            // Bounce up and down using sine curve
+                            const height = Math.sin(object.userData.bounceProgress * Math.PI) * 
+                                           object.userData.bounceHeight;
+                            object.position.y = object.userData.originalY + height;
+                        } else {
+                            // Reset bounce
+                            object.position.y = object.userData.originalY;
+                            object.userData.bouncing = false;
+                        }
+                    }
+                    
+                    // Handle cylinder spinning
+                    if (object.userData.type === 'cylinder' && object.userData.spinning) {
+                        object.userData.spinTimer += 0.01;
+                        
+                        if (object.userData.spinTimer >= 2) {
+                            // Reset spinning after 2 seconds
+                            object.userData.rotationSpeed = object.userData.originalSpeed;
+                            object.userData.spinning = false;
+                            object.userData.spinTimer = 0;
+                        }
+                    }
+                });
+            }
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                // Update object animations
+                update();
+                
+                // Render scene
+                renderer.render(scene, camera);
             }
             
             // Handle window resize
@@ -289,199 +247,160 @@
                 renderer.setSize(window.innerWidth, window.innerHeight);
             }
             
-            // Handle mouse clicks
+            // Mouse down event handler
             function onMouseDown(event) {
-                // Calculate mouse position in normalized device coordinates (-1 to +1)
-                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                isDragging = true;
+                previousMousePosition = {
+                    x: event.clientX,
+                    y: event.clientY
+                };
                 
-                checkObjectInteraction();
+                // Check for object interaction
+                checkInteraction(event.clientX, event.clientY);
             }
             
-            // Handle touch events
+            // Mouse move event handler
+            function onMouseMove(event) {
+                if (!isDragging) return;
+                
+                const deltaMove = {
+                    x: event.clientX - previousMousePosition.x,
+                    y: event.clientY - previousMousePosition.y
+                };
+                
+                // Update scene rotation based on mouse movement
+                sceneRotation.y += deltaMove.x * 0.01;
+                sceneRotation.x += deltaMove.y * 0.01;
+                
+                // Apply rotation to the scene
+                scene.rotation.y = sceneRotation.y;
+                scene.rotation.x = sceneRotation.x;
+                
+                previousMousePosition = {
+                    x: event.clientX,
+                    y: event.clientY
+                };
+            }
+            
+            // Mouse up event handler
+            function onMouseUp() {
+                isDragging = false;
+            }
+            
+            // Touch start event handler
             function onTouchStart(event) {
                 event.preventDefault();
                 
-                if (event.touches.length > 0) {
-                    // Use the first touch point
-                    mouse.x = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
-                    mouse.y = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+                if (event.touches.length === 1) {
+                    isDragging = true;
+                    previousMousePosition = {
+                        x: event.touches[0].clientX,
+                        y: event.touches[0].clientY
+                    };
                     
-                    checkObjectInteraction();
+                    // Check for object interaction
+                    checkInteraction(event.touches[0].clientX, event.touches[0].clientY);
                 }
             }
             
-            // Check if an object was clicked/touched
-            function checkObjectInteraction() {
+            // Touch move event handler
+            function onTouchMove(event) {
+                event.preventDefault();
+                
+                if (!isDragging || event.touches.length !== 1) return;
+                
+                const deltaMove = {
+                    x: event.touches[0].clientX - previousMousePosition.x,
+                    y: event.touches[0].clientY - previousMousePosition.y
+                };
+                
+                // Update scene rotation based on touch movement
+                sceneRotation.y += deltaMove.x * 0.01;
+                sceneRotation.x += deltaMove.y * 0.01;
+                
+                // Apply rotation to the scene
+                scene.rotation.y = sceneRotation.y;
+                scene.rotation.x = sceneRotation.x;
+                
+                previousMousePosition = {
+                    x: event.touches[0].clientX,
+                    y: event.touches[0].clientY
+                };
+            }
+            
+            // Touch end event handler
+            function onTouchEnd() {
+                isDragging = false;
+            }
+            
+            // Check if an object was clicked
+            function checkInteraction(x, y) {
+                // Convert screen coordinates to normalized device coordinates
+                const mouse = new THREE.Vector2();
+                mouse.x = (x / window.innerWidth) * 2 - 1;
+                mouse.y = -(y / window.innerHeight) * 2 + 1;
+                
+                // Create raycaster
+                const raycaster = new THREE.Raycaster();
                 raycaster.setFromCamera(mouse, camera);
+                
+                // Find intersected objects
                 const intersects = raycaster.intersectObjects(objects);
                 
                 if (intersects.length > 0) {
                     const object = intersects[0].object;
                     
-                    // Handle object-specific interactions
+                    // Handle interactions based on object type
                     if (object.userData.type === 'cube') {
                         // Change cube color
-                        object.userData.currentColorIndex = 
-                            (object.userData.currentColorIndex + 1) % object.userData.colors.length;
+                        object.userData.colorIndex = 
+                            (object.userData.colorIndex + 1) % object.userData.colors.length;
                         object.material.color.setHex(
-                            object.userData.colors[object.userData.currentColorIndex]
+                            object.userData.colors[object.userData.colorIndex]
                         );
                         
                         showObjectInfo('cube');
                     } 
-                    else if (object.userData.type === 'pyramid') {
-                        // Make pyramid jump
-                        if (!object.userData.jumping) {
-                            object.userData.jumping = true;
-                            object.userData.jumpProgress = 0;
+                    else if (object.userData.type === 'sphere') {
+                        // Make sphere bounce
+                        if (!object.userData.bouncing) {
+                            object.userData.bouncing = true;
+                            object.userData.bounceProgress = 0;
                             object.userData.originalY = object.position.y;
                         }
                         
-                        showObjectInfo('pyramid');
-                    } 
-                    else if (object.userData.type === 'sphere') {
-                        // Change pulse pattern
-                        const patterns = object.userData.patterns;
-                        const currentIndex = patterns.indexOf(object.userData.pulsePattern);
-                        const nextIndex = (currentIndex + 1) % patterns.length;
-                        object.userData.pulsePattern = patterns[nextIndex];
-                        
                         showObjectInfo('sphere');
+                    } 
+                    else if (object.userData.type === 'cylinder') {
+                        // Make cylinder spin faster
+                        object.userData.rotationSpeed = object.userData.fastSpeed;
+                        object.userData.spinning = true;
+                        object.userData.spinTimer = 0;
+                        
+                        showObjectInfo('cylinder');
                     }
-                } else {
-                    hideObjectInfo();
                 }
             }
             
-            // Show object information panel
+            // Show object information
             function showObjectInfo(type) {
-                objectTitle.textContent = objectData[type].title;
-                objectDesc.textContent = objectData[type].description;
-                objectInfo.style.opacity = '1';
+                const infoBox = document.getElementById('object-info');
+                const titleElement = document.getElementById('object-title');
+                const descElement = document.getElementById('object-desc');
                 
-                // Auto-hide after 3 seconds
-                setTimeout(hideObjectInfo, 3000);
+                titleElement.textContent = objectData[type].title;
+                descElement.textContent = objectData[type].description;
+                
+                infoBox.style.opacity = '1';
+                
+                // Hide after 3 seconds
+                setTimeout(() => {
+                    infoBox.style.opacity = '0';
+                }, 3000);
             }
             
-            // Hide object information panel
-            function hideObjectInfo() {
-                objectInfo.style.opacity = '0';
-            }
-            
-            // Update FPS counter
-            function updateFPS() {
-                if (frameCount % 10 !== 0) return;
-                
-                const now = performance.now();
-                const delta = now - lastTime;
-                lastTime = now;
-                
-                const fps = Math.round(10000 / delta);
-                fpsCounter.textContent = `FPS: ${fps}`;
-            }
-            
-            // Update object animations
-            function updateObjects(deltaTime) {
-                objects.forEach(object => {
-                    // Common rotation for all objects
-                    if (object.userData.rotationSpeed) {
-                        object.rotation.x += object.userData.rotationSpeed.x;
-                        object.rotation.y += object.userData.rotationSpeed.y;
-                        if (object.userData.rotationSpeed.z) {
-                            object.rotation.z += object.userData.rotationSpeed.z;
-                        }
-                    }
-                    
-                    // Object-specific animations
-                    if (object.userData.type === 'pyramid' && object.userData.jumping) {
-                        // Handle jumping animation
-                        object.userData.jumpProgress += object.userData.jumpSpeed;
-                        
-                        if (object.userData.jumpProgress <= 1) {
-                            // Jump up and down using sine curve
-                            const jumpHeight = object.userData.jumpHeight * 
-                                Math.sin(object.userData.jumpProgress * Math.PI);
-                            
-                            object.position.y = object.userData.originalY + jumpHeight;
-                        } else {
-                            // Reset jump when complete
-                            object.position.y = object.userData.originalY;
-                            object.userData.jumping = false;
-                        }
-                    }
-                    
-                    if (object.userData.type === 'sphere') {
-                        // Handle pulsing animation based on selected pattern
-                        object.userData.pulseProgress += object.userData.pulseSpeed;
-                        
-                        // Reset progress when complete cycle
-                        if (object.userData.pulseProgress > Math.PI * 2) {
-                            object.userData.pulseProgress = 0;
-                        }
-                        
-                        let scale = 1;
-                        
-                        switch (object.userData.pulsePattern) {
-                            case 'sine':
-                                // Smooth sine wave pulsing
-                                scale = 1 + Math.sin(object.userData.pulseProgress) * 
-                                    object.userData.pulseAmount;
-                                break;
-                                
-                            case 'bounce':
-                                // Bounce effect (absolute value of sine)
-                                scale = 1 + Math.abs(Math.sin(object.userData.pulseProgress)) * 
-                                    object.userData.pulseAmount;
-                                break;
-                                
-                            case 'sharp':
-                                // Sharp triangular pulse
-                                const triangleWave = 2 * Math.abs(
-                                    (object.userData.pulseProgress / Math.PI) % 2 - 1
-                                ) - 1;
-                                scale = 1 + triangleWave * object.userData.pulseAmount;
-                                break;
-                        }
-                        
-                        object.scale.set(scale, scale, scale);
-                    }
-                });
-            }
-            
-            // Animation loop
-            function animate(time) {
-                requestAnimationFrame(animate);
-                frameCount++;
-                
-                // Calculate time delta for smooth animations
-                const deltaTime = time - lastTime;
-                
-                // Update controls
-                controls.update();
-                
-                // Update FPS counter
-                updateFPS();
-                
-                // Update object animations
-                updateObjects(deltaTime);
-                
-                // Render scene
-                renderer.render(scene, camera);
-            }
-            
-            // Start everything
-            try {
-                init();
-            } catch (error) {
-                console.error("Error initializing:", error);
-                loading.innerHTML = `
-                    <h2>Error</h2>
-                    <p>Could not initialize 3D scene:</p>
-                    <p>${error.message}</p>
-                    <p>Please try a different browser.</p>
-                `;
-            }
+            // Start the application
+            init();
         })();
     </script>
 </body>
