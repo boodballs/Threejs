@@ -13,13 +13,18 @@
             width: 100%;
             height: 100%;
             background-color: #000;
-            display: flex;
+            display: flex; /* Keep flex for centering */
             justify-content: center;
             align-items: center;
             color: white;
             font-family: sans-serif;
             z-index: 9999;
             transition: opacity 0.5s ease-out; /* Optional: fade out effect */
+            opacity: 1; /* Start fully visible */
+        }
+        /* Style for when loading is finished */
+        #loadingScreen.fade-out {
+            opacity: 0;
         }
     </style>
 </head>
@@ -39,33 +44,34 @@
         // Mouse/Touch controls
         let controls;
 
-        // Loading Manager
-        const loadingManager = new THREE.LoadingManager(() => {
-            // Callback when all assets are loaded (or immediately if none are managed)
-            const loadingScreen = document.getElementById('loadingScreen');
-            loadingScreen.style.opacity = '0'; // Start fade out
-            // Use setTimeout to remove after fade-out transition completes
-            setTimeout(() => {
-                loadingScreen.style.display = 'none'; // Hide loading screen
-            }, 500); // Match the transition duration in CSS
-            
-            // Start animation loop ONLY after everything is set up and loaded
-            animate(); 
-        });
-
-        // Loading Progress (optional - Note: may not show progress if no assets are loaded via the manager)
-        const progressBar = document.getElementById('loadingScreen');
+        // --- Loading Manager Setup (Optional for this specific case, but good practice if adding assets later) ---
+        // We define it but won't rely on its onLoad for initial startup in *this* version.
+        const loadingManager = new THREE.LoadingManager(); 
+        
+        // Example: If you later add assets, you'd use it like this:
+        // const textureLoader = new THREE.TextureLoader(loadingManager);
+        // const texture = textureLoader.load('path/to/texture.jpg');
+        
+        // We can still use onProgress/onError if assets ARE loaded via the manager later.
+        const progressBar = document.getElementById('loadingScreen'); // Get reference early
         loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
-            // Improved progress text
-            progressBar.textContent = 'Loading: ' + Math.round(itemsLoaded / itemsTotal * 100) + '%';
+            progressBar.textContent = 'Loading Asset: ' + Math.round(itemsLoaded / itemsTotal * 100) + '%';
         };
         loadingManager.onError = function (url) {
             console.error('There was an error loading ' + url);
             progressBar.textContent = 'Error loading assets. Check console.';
         };
-        
+        // We remove the critical startup logic from onLoad for now.
+        loadingManager.onLoad = () => {
+           console.log('Loading complete (if any assets were managed)!'); 
+           // You could put actions here that *specifically* depend on loaded assets.
+        };
+        // --- End Loading Manager Setup ---
+
+
         function init() {
-            // FIX 1: Initialize scene FIRST
+            console.log("Initializing scene..."); // Debug log
+            // Initialize scene FIRST
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x333333);
 
@@ -76,56 +82,50 @@
             // Renderer
             renderer = new THREE.WebGLRenderer({antialias: true});
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true; // Enable shadows
-            renderer.setPixelRatio(window.devicePixelRatio); // Improve rendering on high-resolution displays
+            renderer.shadowMap.enabled = true; 
+            renderer.setPixelRatio(window.devicePixelRatio); 
             document.body.appendChild(renderer.domElement);
 
-            // Objects - Now it's safe to call these as `scene` exists
+            // Objects 
             cube = createCube();
             sphere = createSphere();
             torus = createTorus();
 
             // Lighting
-            const ambientLight = new THREE.AmbientLight(0x444444); // Soft ambient light
+            const ambientLight = new THREE.AmbientLight(0x444444); 
             scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Increased intensity slightly
-            directionalLight.position.set(1, 1.5, 1); // Adjust light position
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); 
+            directionalLight.position.set(1, 1.5, 1); 
             directionalLight.castShadow = true;
-            // Optional: Configure shadow camera for better quality/performance
             directionalLight.shadow.mapSize.width = 1024;
             directionalLight.shadow.mapSize.height = 1024;
             directionalLight.shadow.camera.near = 0.5;
             directionalLight.shadow.camera.far = 50; 
             scene.add(directionalLight);
 
-            // Add a ground plane to receive shadows (optional but good for visuals)
+            // Ground plane
             const planeGeometry = new THREE.PlaneGeometry(20, 20);
             const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
             const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-            plane.rotation.x = -Math.PI / 2; // Rotate it to be horizontal
-            plane.position.y = -1.5; // Position it below the objects
-            plane.receiveShadow = true; // Allow it to receive shadows
+            plane.rotation.x = -Math.PI / 2; 
+            plane.position.y = -1.5; 
+            plane.receiveShadow = true; 
             scene.add(plane);
 
-
-            // Controls - Ensure OrbitControls script is loaded before this runs
-            // FIX 2 is handled by adding the script tag in the HTML <head>
+            // Controls
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true; // Add damping for smoother movement
+            controls.enableDamping = true; 
             controls.dampingFactor = 0.05;
-            controls.screenSpacePanning = false; // Keep panning relative to origin
-            // Adjust angle limits slightly if needed (using radians)
-            controls.minDistance = 2; // Prevent zooming too close
-            controls.maxDistance = 20; // Prevent zooming too far out
-            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent looking straight down or flipping under
-
+            controls.screenSpacePanning = false; 
+            controls.minDistance = 2; 
+            controls.maxDistance = 20; 
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; 
 
             // Event Listeners for resize handling
             window.addEventListener('resize', onWindowResize);
-            
-            // --- Important: We don't call animate() here anymore. ---
-            // The LoadingManager's onLoad callback will start the animation loop.
+
+            console.log("Initialization complete."); // Debug log
         }
 
 
@@ -135,8 +135,8 @@
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.x = -2;
             mesh.castShadow = true;
-            mesh.receiveShadow = false; // Cubes usually don't receive shadows on themselves
-            scene.add(mesh); // Safe now, scene exists
+            mesh.receiveShadow = false; 
+            scene.add(mesh); 
             mesh.userData = { clickable: true };
             return mesh;
         }
@@ -148,19 +148,19 @@
             mesh.position.x = 0;
             mesh.castShadow = true;
             mesh.receiveShadow = false; 
-            scene.add(mesh); // Safe now
+            scene.add(mesh); 
             mesh.userData = { clickable: true };
             return mesh;
         }
 
         function createTorus() {
-            const geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100); // Adjusted segments for potentially smoother look
+            const geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100); 
             const material = new THREE.MeshStandardMaterial({ color: 0x0000ff, roughness: 0.7, metalness: 0.2 });
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.x = 2;
             mesh.castShadow = true;
             mesh.receiveShadow = false; 
-            scene.add(mesh); // Safe now
+            scene.add(mesh); 
             mesh.userData = { clickable: true };
             return mesh;
         }
@@ -174,26 +174,54 @@
         function animate() {
             requestAnimationFrame(animate); // Request next frame
             
-            controls.update(); // Update OrbitControls (needed if enableDamping is true)
+            controls.update(); // Update OrbitControls 
 
             // Rotate objects for animation
-            const delta = 0.01; // Use a constant delta or ideally THREE.Clock for frame-rate independence
+            const delta = 0.01; 
             if (cube) cube.rotation.x += delta;
             if (cube) cube.rotation.y += delta;
-            if (sphere) sphere.rotation.y += delta; // Changed rotation axis for variety
+            if (sphere) sphere.rotation.y += delta; 
             if (torus) torus.rotation.x -= delta;
             if (torus) torus.rotation.y -= delta * 0.5;
-
 
             renderer.render(scene, camera); // Render the scene
         }
 
-        // Initialize the scene setup
-        init();
+        // ---- NEW Startup Function ----
+        function hideLoadingScreenAndStart() {
+            console.log("Hiding loading screen and starting animation..."); // Debug log
+            const loadingScreen = document.getElementById('loadingScreen');
+            if (loadingScreen) {
+                loadingScreen.classList.add('fade-out'); // Add class to trigger CSS opacity transition
 
-        // Note: The loadingManager will automatically call its 'onLoad' callback 
-        // (which starts animate()) once the JS engine reaches it, 
-        // even if no assets were explicitly loaded *through* the manager.
+                // Remove the element from the DOM after the transition finishes
+                loadingScreen.addEventListener('transitionend', () => {
+                    loadingScreen.style.display = 'none'; 
+                }, { once: true }); // Use 'once: true' so the listener removes itself
+
+                // Fallback: If transition doesn't fire (e.g., element removed too quickly), 
+                // hide it after a delay slightly longer than the transition.
+                setTimeout(() => {
+                     if (loadingScreen.style.display !== 'none') { // Check if not already hidden by transitionend
+                        loadingScreen.style.display = 'none';
+                     }
+                }, 600); // 500ms transition + 100ms buffer
+            } else {
+                console.error("Loading screen element not found!");
+            }
+            
+            // Start the animation loop
+            animate(); 
+        }
+
+        // ---- Execution Start ----
+        
+        // 1. Initialize the Three.js scene setup
+        init(); 
+
+        // 2. Hide the loading screen and start the animation loop
+        // We call this directly now, instead of relying on LoadingManager.onLoad
+        hideLoadingScreenAndStart(); 
 
     </script>
 </body>
