@@ -3,293 +3,260 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive 3D Scene</title>
+    <title>Responsive 3D Scene (Three.js)</title>
     <style>
-        /* Basic reset */
         body {
             margin: 0;
-            font-family: 'Inter', sans-serif; /* Use Inter font */
             overflow: hidden; /* Prevent scrollbars */
-            background-color: #f0f0f0; /* Light gray background */
+            background-color: #111;
+            color: white;
+            font-family: Arial, sans-serif;
         }
-
-        /* Container for the canvas */
-        #container {
-            width: 100vw; /* Full viewport width */
-            height: 100vh; /* Full viewport height */
-            display: block;
-            position: relative; /* Needed for absolute positioning of loader */
+        canvas {
+            display: block; /* Remove potential space below canvas */
         }
-
-        /* Loading indicator styles */
-        #loader {
+        #loading-indicator {
             position: absolute;
-            left: 50%;
             top: 50%;
-            transform: translate(-50%, -50%);
-            border: 8px solid #f3f3f3; /* Light grey */
-            border-top: 8px solid #3498db; /* Blue */
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-            z-index: 10; /* Ensure loader is above canvas */
-        }
-
-        /* WebGL compatibility message */
-        #webgl-error {
-            position: absolute;
             left: 50%;
-            top: 50%;
             transform: translate(-50%, -50%);
-            color: red;
-            font-size: 1.2em;
-            text-align: center;
-            display: none; /* Hidden by default */
-            background-color: rgba(255, 255, 255, 0.8);
-            padding: 20px;
-            border-radius: 8px;
-            z-index: 11;
+            padding: 15px 30px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+            z-index: 10; /* Ensure it's above the canvas initially */
         }
-
-
-        @keyframes spin {
-            0% { transform: translate(-50%, -50%) rotate(0deg); }
-            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        #info {
+             position: absolute;
+             top: 10px;
+             left: 10px;
+             background-color: rgba(0,0,0,0.5);
+             padding: 5px 10px;
+             border-radius: 3px;
+             font-size: 0.9em;
         }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div id="container">
-        <div id="loader"></div>
-        <div id="webgl-error">
-            Your browser or device does not support WebGL, which is required for this 3D content. Please ensure WebGL is enabled in your browser settings.
-        </div>
-    </div>
+    <div id="loading-indicator">Loading Scene...</div>
+    <div id="info">Click on objects!</div>
+    <canvas id="webgl-canvas"></canvas>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/WebGL.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+            }
+        }
+    </script>
 
-    <script defer>
+    <script type="module">
+        import * as THREE from 'three';
+        // Import OrbitControls addon for camera interaction
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
         // --- Global Variables ---
         let scene, camera, renderer, controls;
-        let cube, sphere, torus;
-        const interactiveObjects = [];
+        let torusKnot, sphere, box;
+        const interactableObjects = []; // Array to hold objects we can click on
+        let selectedObject = null; // Keep track of the currently selected object
+
         const raycaster = new THREE.Raycaster();
-        const pointer = new THREE.Vector2();
-        const clock = new THREE.Clock();
+        const pointer = new THREE.Vector2(); // Use pointer instead of mouse for broader input compatibility
 
-        // --- Initialization Function ---
+        // --- Initialization ---
         function init() {
-            const container = document.getElementById('container');
-            const loader = document.getElementById('loader');
-            const errorMessage = document.getElementById('webgl-error');
-
-            // --- Pre-checks ---
-            // 1. Check if WebGL helper script loaded and WebGL is available
-            if (typeof WEBGL === 'undefined' || !WEBGL.isWebGLAvailable()) {
-                console.error("WebGL check failed: WEBGL object not found or WebGL not available.");
-                if (loader) loader.style.display = 'none';
-                if (errorMessage) errorMessage.style.display = 'block'; // Show the error message div
-                // Try to append the specific message if WEBGL object exists
-                if (typeof WEBGL !== 'undefined' && WEBGL.getWebGLErrorMessage && container) {
-                    container.appendChild(WEBGL.getWebGLErrorMessage());
-                }
-                return; // Stop initialization
-            }
-
-             // 2. Check if OrbitControls script loaded
-            if (typeof THREE.OrbitControls === 'undefined') {
-                console.error("OrbitControls check failed: THREE.OrbitControls not found. Check script URL and loading order.");
-                if (loader) loader.style.display = 'none';
-                if (errorMessage) {
-                    errorMessage.style.display = 'block';
-                    errorMessage.textContent = "Error loading camera controls. Please refresh the page.";
-                }
-                return; // Stop initialization
-            }
-
-            // --- Proceed with Setup ---
-
-            // 1. Scene Setup
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 10, 50);
-
-            // 2. Camera Setup
-            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-            camera.position.set(5, 5, 10);
-
-            // 3. Renderer Setup
             try {
-                renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(container.clientWidth, container.clientHeight);
-                renderer.setPixelRatio(window.devicePixelRatio);
-                renderer.shadowMap.enabled = true;
-                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-                container.appendChild(renderer.domElement);
+                // 1. Scene: Container for all objects, lights, cameras
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x1a1a2a); // Dark blue background
+
+                // 2. Camera: Defines the view frustum
+                // PerspectiveCamera(fov, aspect_ratio, near_clip, far_clip)
+                camera = new THREE.PerspectiveCamera(
+                    75, // Field of View (degrees)
+                    window.innerWidth / window.innerHeight, // Aspect Ratio
+                    0.1, // Near clipping plane
+                    1000 // Far clipping plane
+                );
+                camera.position.z = 8; // Move camera back
+
+                // 3. Renderer: Renders the scene using WebGL
+                const canvas = document.getElementById('webgl-canvas');
+                renderer = new THREE.WebGLRenderer({
+                    canvas: canvas,
+                    antialias: true // Smoother edges, might impact performance slightly
+                });
+                // Performance Optimization: Limit pixel ratio on high-density displays
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                renderer.setSize(window.innerWidth, window.innerHeight);
+
+                // 4. Controls: Allow mouse/touch interaction
+                controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true; // Adds smooth inertia to camera movement
+                controls.dampingFactor = 0.05;
+                controls.screenSpacePanning = false; // Keep panning relative to world space
+                controls.minDistance = 3; // Prevent zooming too close
+                controls.maxDistance = 20; // Prevent zooming too far
+
+                // 5. Lighting: Illuminate the scene
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Soft white light everywhere
+                scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1); // White light from a direction
+                directionalLight.position.set(5, 5, 5);
+                directionalLight.castShadow = true; // Enable shadows (optional, impacts performance)
+                scene.add(directionalLight);
+
+                // --- Create 3D Objects ---
+
+                // Material: Defines appearance (color, texture, shininess)
+                const knotMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x049ef4, // Blue
+                    roughness: 0.3,
+                    metalness: 0.6
+                });
+                const sphereMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xff5733, // Orange
+                    roughness: 0.5,
+                    metalness: 0.3
+                });
+                const boxMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x33ff57, // Green
+                    roughness: 0.7,
+                    metalness: 0.1
+                });
+
+                // Geometry: Defines shape
+                const knotGeometry = new THREE.TorusKnotGeometry(1, 0.4, 100, 16);
+                const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+                const boxGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+
+                // Mesh: Combines Geometry and Material
+                torusKnot = new THREE.Mesh(knotGeometry, knotMaterial);
+                torusKnot.position.x = -3.5;
+                torusKnot.name = "TorusKnot"; // Give objects names for identification
+
+                sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.x = 0;
+                sphere.name = "Sphere";
+
+                box = new THREE.Mesh(boxGeometry, boxMaterial);
+                box.position.x = 3.5;
+                box.name = "Box";
+
+                // Add meshes to the scene
+                scene.add(torusKnot);
+                scene.add(sphere);
+                scene.add(box);
+
+                // Add objects to the interactable list
+                interactableObjects.push(torusKnot, sphere, box);
+
+                // --- Event Listeners ---
+                window.addEventListener('resize', onWindowResize);
+                // Use 'pointerdown' for better compatibility across mouse/touch/pen
+                window.addEventListener('pointerdown', onPointerDown);
+
+                // --- Hide Loading Indicator ---
+                document.getElementById('loading-indicator').style.display = 'none';
+
+                // --- Start Animation Loop ---
+                animate();
+
             } catch (error) {
-                console.error("Error initializing WebGL Renderer:", error);
-                if (loader) loader.style.display = 'none';
-                if (errorMessage) {
-                     errorMessage.style.display = 'block';
-                     errorMessage.textContent = "Failed to initialize the 3D renderer. Your device might not support WebGL.";
-                }
-                return; // Stop initialization
+                console.error("Error initializing Three.js scene:", error);
+                document.getElementById('loading-indicator').textContent = 'Error initializing WebGL. Please ensure your browser supports it.';
+                // Optionally display a more user-friendly error message on the page
             }
-
-
-            // 4. Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-            scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(5, 10, 7.5);
-            directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 1024;
-            directionalLight.shadow.mapSize.height = 1024;
-            directionalLight.shadow.camera.near = 0.5;
-            directionalLight.shadow.camera.far = 50;
-            scene.add(directionalLight);
-
-            // 5. Create Objects
-            const materialParams = { metalness: 0.1, roughness: 0.5 };
-            const cubeGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
-            const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, ...materialParams });
-            cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-            cube.position.set(-3, 0, 0);
-            cube.castShadow = true;
-            cube.receiveShadow = true;
-            cube.userData = { originalColor: new THREE.Color(0xff0000), name: 'Cube' };
-            scene.add(cube);
-            interactiveObjects.push(cube);
-
-            const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
-            const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00, ...materialParams });
-            sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-            sphere.position.set(0, 0, -2);
-            sphere.castShadow = true;
-            sphere.receiveShadow = true;
-            sphere.userData = { originalColor: new THREE.Color(0x00ff00), name: 'Sphere' };
-            scene.add(sphere);
-            interactiveObjects.push(sphere);
-
-            const torusGeometry = new THREE.TorusGeometry(1, 0.4, 16, 100);
-            const torusMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff, ...materialParams });
-            torus = new THREE.Mesh(torusGeometry, torusMaterial);
-            torus.position.set(3, 0, 0);
-            torus.castShadow = true;
-            torus.receiveShadow = true;
-            torus.userData = { originalColor: new THREE.Color(0x0000ff), name: 'Torus' };
-            scene.add(torus);
-            interactiveObjects.push(torus);
-
-            const planeGeometry = new THREE.PlaneGeometry(50, 50);
-            const planeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, side: THREE.DoubleSide, metalness: 0.1, roughness: 0.8 });
-            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-            plane.rotation.x = -Math.PI / 2;
-            plane.position.y = -1.5;
-            plane.receiveShadow = true;
-            scene.add(plane);
-
-            // 6. Controls Setup (We already checked if THREE.OrbitControls exists)
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.screenSpacePanning = false;
-            controls.minDistance = 3;
-            controls.maxDistance = 30;
-            controls.maxPolarAngle = Math.PI / 2 - 0.05;
-            controls.target.set(0, 0, 0);
-            controls.update();
-
-            // 7. Event Listeners
-            window.addEventListener('resize', onWindowResize, false);
-            renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
-
-            // Hide loader and start animation
-            if (loader) loader.style.display = 'none';
-            animate();
         }
 
-        // --- Handle Window Resize ---
+        // --- Handle Window Resizing ---
         function onWindowResize() {
-            const container = document.getElementById('container');
-            // Check if camera and renderer are initialized
-            if (!container || !renderer || !camera) return;
-            camera.aspect = container.clientWidth / container.clientHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(container.clientWidth, container.clientHeight);
+            // Update camera aspect ratio
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix(); // Apply changes
+
+            // Update renderer size
+            renderer.setSize(window.innerWidth, window.innerHeight);
+             // Re-set pixel ratio in case it changes (e.g., moving window between monitors)
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         }
 
-        // --- Handle Pointer Down Event (Click/Tap) ---
+        // --- Handle Pointer Click/Tap ---
         function onPointerDown(event) {
-             // Check if essential components are ready
-             if (!renderer || !camera || !raycaster || !interactiveObjects || interactiveObjects.length === 0) return;
-            const rect = renderer.domElement.getBoundingClientRect();
-            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            // Calculate pointer position in normalized device coordinates (-1 to +1)
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
+
+            // Update the picking ray with the camera and pointer position
             raycaster.setFromCamera(pointer, camera);
-            const intersects = raycaster.intersectObjects(interactiveObjects);
+
+            // Calculate objects intersecting the picking ray
+            const intersects = raycaster.intersectObjects(interactableObjects);
+
+            // Reset previous selection first
+            if (selectedObject) {
+                selectedObject.mesh.scale.set(1, 1, 1); // Reset scale
+                selectedObject.mesh.material.color.set(selectedObject.originalColor); // Reset color
+                selectedObject = null;
+            }
+
             if (intersects.length > 0) {
-                const intersectedObject = intersects[0].object;
-                // Ensure userData and originalColor exist before accessing
-                if (!intersectedObject.userData || !intersectedObject.userData.originalColor) return;
+                // Get the first intersected object
+                const intersectedMesh = intersects[0].object;
 
-                const originalColor = intersectedObject.userData.originalColor;
-                const highlightColor = new THREE.Color(0xffff00); // Yellow
+                // Store original state and modify
+                 selectedObject = {
+                     mesh: intersectedMesh,
+                     originalColor: intersectedMesh.material.color.getHex() // Store original color hex
+                 };
 
-                if (!intersectedObject.userData.isHighlighted) {
-                    intersectedObject.material.color.copy(highlightColor);
-                    intersectedObject.userData.isHighlighted = true;
-                    console.log(`Clicked/Tapped on: ${intersectedObject.userData.name || 'Object'}`); // Add fallback name
+                intersectedMesh.scale.set(1.2, 1.2, 1.2); // Scale up slightly
+                intersectedMesh.material.color.set(0xffff00); // Change color to yellow
 
-                    setTimeout(() => {
-                        // Check object still exists, has userData, and is highlighted before reverting
-                        if (intersectedObject && intersectedObject.userData && intersectedObject.userData.isHighlighted) {
-                           intersectedObject.material.color.copy(intersectedObject.userData.originalColor);
-                           intersectedObject.userData.isHighlighted = false;
-                        }
-                    }, 500);
-                }
+                console.log("Clicked on:", intersectedMesh.name); // Log the name
+
+                // Optional: Set a timer to revert the effect automatically
+                setTimeout(() => {
+                    if (selectedObject && selectedObject.mesh === intersectedMesh) {
+                         selectedObject.mesh.scale.set(1, 1, 1);
+                         selectedObject.mesh.material.color.set(selectedObject.originalColor);
+                         selectedObject = null;
+                    }
+                }, 1000); // Revert after 1 second
             }
         }
+
 
         // --- Animation Loop ---
+        const clock = new THREE.Clock(); // For time-based animation
+
         function animate() {
-            requestAnimationFrame(animate); // Loop
-            // Check if essential components are ready for animation/rendering
-            if (!controls || !cube || !sphere || !torus || !renderer || !scene || !camera || !clock) return;
-            const delta = clock.getDelta();
-            cube.rotation.x += 0.5 * delta;
-            cube.rotation.y += 0.5 * delta;
-            sphere.position.y = Math.sin(clock.getElapsedTime() * 1.5) * 0.5;
-            torus.rotation.y += 0.8 * delta;
-            torus.rotation.z -= 0.4 * delta;
-            controls.update(); // Required for damping
-            renderer.render(scene, camera); // Draw the scene
+            // Request the next frame
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime(); // Time elapsed since start
+
+            // Animate objects (simple rotation)
+            torusKnot.rotation.x = elapsedTime * 0.3;
+            torusKnot.rotation.y = elapsedTime * 0.2;
+
+            sphere.rotation.y = -elapsedTime * 0.4;
+
+            box.rotation.x = elapsedTime * 0.1;
+            box.rotation.y = elapsedTime * 0.1;
+
+            // Update controls (important for damping)
+            controls.update();
+
+            // Render the scene from the camera's perspective
+            renderer.render(scene, camera);
         }
 
-        // --- Start Execution ---
-        // Call init directly. The 'defer' attribute ensures this runs
-        // after the DOM is ready and previous scripts have loaded.
+        // --- Start the application ---
         init();
 
     </script>
 </body>
 </html>
-```
-
-**Summary of Changes:**
-
-1.  **Reverted to `defer`:** Removed `type="module"` and added `defer` back to the main script tag.
-2.  **Explicit Checks Added:** Added checks at the beginning of `init()` to ensure `WEBGL` and `THREE.OrbitControls` are defined before proceeding. This should reliably catch loading order issues.
-3.  **Removed `try...catch` for WebGL check:** Replaced the `try...catch` with the more direct `typeof WEBGL === 'undefined'` check.
-4.  **Added `try...catch` for Renderer:** Added error handling around the `WebGLRenderer` instantiation, as this can also fail if WebGL context cannot be created.
-5.  **Improved Error Messages:** Made the console and user-facing error messages slightly more informative.
-6.  **Added Safety Checks:** Included checks in `animate` and `onPointerDown` to ensure variables are initialized before use, preventing potential runtime errors if `init` fails partially.
-
-This version focuses on ensuring the necessary libraries are loaded before they are used, which should resolve the `WEBGL is not defined` error and prevent the syntax error encountered with `type="module"`. Please try running this updated co
