@@ -1,228 +1,361 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive 3D Scene</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        #loadingScreen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #000;
-            display: flex; /* Keep flex for centering */
-            justify-content: center;
-            align-items: center;
-            color: white;
-            font-family: sans-serif;
-            z-index: 9999;
-            transition: opacity 0.5s ease-out; /* Optional: fade out effect */
-            opacity: 1; /* Start fully visible */
-        }
-        /* Style for when loading is finished */
-        #loadingScreen.fade-out {
-            opacity: 0;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="description" content="3D Web App with Three.js" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Web App with Three.js</title>
+  <style>
+    /*
+      Style for basic page layout:
+      - Canvas fills the entire screen
+      - Loading overlay for showing progress and errors
+      - Responsive design ensures the app looks good on mobile & desktop
+    */
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: sans-serif;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a1a; /* Dark background for visual contrast */
+    }
+
+    canvas {
+      display: block; /* Removes extra spacing around the canvas in some browsers */
+    }
+
+    /*
+      LOADING OVERLAY
+      - A simple screen overlay to indicate loading progress or errors
+    */
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      color: #fff;
+      text-align: center;
+      font-size: 1.2rem;
+      transition: opacity 0.3s ease;
+    }
+
+    #loadingOverlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Simple spinner */
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #fff;
+      border-bottom-color: transparent;
+      border-radius: 50%;
+      display: inline-block;
+      box-sizing: border-box;
+      animation: rotation 1s linear infinite;
+      margin-right: 1rem;
+    }
+
+    @keyframes rotation {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-    <div id="loadingScreen">Loading...</div>
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div id="loadingText">Loading 3D scene...</div>
+  </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.152.1/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.152.1/examples/js/controls/OrbitControls.js"></script>
 
-    <script>
-        // Initialize scene, camera, and renderer
-        let scene, camera, renderer;
+  <script>
+    // Global variables
+    let scene, camera, renderer, controls;
+    let raycaster, mouse;
+    let cube, sphere, torus;
+    let loadingOverlay, loadingText;
 
-        // Interactive objects
-        let cube, sphere, torus;
+    /***********************
+     * 1) INITIALIZE SCENE *
+     ***********************/
+    function init() {
+      // Reference to loading overlay and text
+      loadingOverlay = document.getElementById('loadingOverlay');
+      loadingText = document.getElementById('loadingText');
 
-        // Mouse/Touch controls
-        let controls;
+      // Scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111111);
 
-        // --- Loading Manager Setup (Optional for this specific case, but good practice if adding assets later) ---
-        // We define it but won't rely on its onLoad for initial startup in *this* version.
-        const loadingManager = new THREE.LoadingManager(); 
-        
-        // Example: If you later add assets, you'd use it like this:
-        // const textureLoader = new THREE.TextureLoader(loadingManager);
-        // const texture = textureLoader.load('path/to/texture.jpg');
-        
-        // We can still use onProgress/onError if assets ARE loaded via the manager later.
-        const progressBar = document.getElementById('loadingScreen'); // Get reference early
-        loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
-            progressBar.textContent = 'Loading Asset: ' + Math.round(itemsLoaded / itemsTotal * 100) + '%';
-        };
-        loadingManager.onError = function (url) {
-            console.error('There was an error loading ' + url);
-            progressBar.textContent = 'Error loading assets. Check console.';
-        };
-        // We remove the critical startup logic from onLoad for now.
-        loadingManager.onLoad = () => {
-           console.log('Loading complete (if any assets were managed)!'); 
-           // You could put actions here that *specifically* depend on loaded assets.
-        };
-        // --- End Loading Manager Setup ---
+      // Camera (Perspective)
+      camera = new THREE.PerspectiveCamera(
+        60,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+      );
+      camera.position.set(0, 2, 8);
 
+      // Renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      // Use sRGBEncoding for more accurate color output
+      // Note: In newer Three.js versions (r152+), color management is handled differently.
+      // For r152, renderer.outputEncoding might be deprecated in favor of renderer.outputColorSpace.
+      // However, for 0.152.1, this should still work or you might use THREE.SRGBColorSpace.
+      // For simplicity and compatibility with the specified version, we'll keep sRGBEncoding.
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      document.body.appendChild(renderer.domElement);
 
-        function init() {
-            console.log("Initializing scene..."); // Debug log
-            // Initialize scene FIRST
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x333333);
+      // Orbit Controls for mouse/touch navigation
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true; // Smooth controls
+      controls.dampingFactor = 0.05;
 
-            // Camera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 5;
+      // Helpers for raycasting (to pick objects)
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
 
-            // Renderer
-            renderer = new THREE.WebGLRenderer({antialias: true});
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true; 
-            renderer.setPixelRatio(window.devicePixelRatio); 
-            document.body.appendChild(renderer.domElement);
+      // Add basic lights for clarity
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+      scene.add(ambientLight);
 
-            // Objects 
-            cube = createCube();
-            sphere = createSphere();
-            torus = createTorus();
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(0, 10, 10);
+      scene.add(directionalLight);
 
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0x444444); 
-            scene.add(ambientLight);
+      // Load all resources using LoadingManager to show overlay
+      // NOTE: Currently, no assets are loaded *via* this manager.
+      // Geometries/Materials are created directly.
+      // So, onLoad will fire immediately. The timeouts handle the visual display.
+      const loadingManager = new THREE.LoadingManager();
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); 
-            directionalLight.position.set(1, 1.5, 1); 
-            directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 1024;
-            directionalLight.shadow.mapSize.height = 1024;
-            directionalLight.shadow.camera.near = 0.5;
-            directionalLight.shadow.camera.far = 50; 
-            scene.add(directionalLight);
+      // Handle loading progression
+      loadingManager.onProgress = function (url, itemsLoaded, itemsTotal) {
+        loadingText.textContent = `Loading ${itemsLoaded} / ${itemsTotal} resources...`;
+      };
 
-            // Ground plane
-            const planeGeometry = new THREE.PlaneGeometry(20, 20);
-            const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide });
-            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-            plane.rotation.x = -Math.PI / 2; 
-            plane.position.y = -1.5; 
-            plane.receiveShadow = true; 
-            scene.add(plane);
-
-            // Controls
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true; 
-            controls.dampingFactor = 0.05;
-            controls.screenSpacePanning = false; 
-            controls.minDistance = 2; 
-            controls.maxDistance = 20; 
-            controls.maxPolarAngle = Math.PI / 2 - 0.05; 
-
-            // Event Listeners for resize handling
-            window.addEventListener('resize', onWindowResize);
-
-            console.log("Initialization complete."); // Debug log
-        }
-
-
-        function createCube() {
-            const geometry = new THREE.BoxGeometry(1, 1, 1);
-            const material = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.5, metalness: 0.5 });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.x = -2;
-            mesh.castShadow = true;
-            mesh.receiveShadow = false; 
-            scene.add(mesh); 
-            mesh.userData = { clickable: true };
-            return mesh;
-        }
-
-        function createSphere() {
-            const geometry = new THREE.SphereGeometry(0.7, 32, 32);
-            const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.3, metalness: 0.6 });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.x = 0;
-            mesh.castShadow = true;
-            mesh.receiveShadow = false; 
-            scene.add(mesh); 
-            mesh.userData = { clickable: true };
-            return mesh;
-        }
-
-        function createTorus() {
-            const geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100); 
-            const material = new THREE.MeshStandardMaterial({ color: 0x0000ff, roughness: 0.7, metalness: 0.2 });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.x = 2;
-            mesh.castShadow = true;
-            mesh.receiveShadow = false; 
-            scene.add(mesh); 
-            mesh.userData = { clickable: true };
-            return mesh;
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate); // Request next frame
-            
-            controls.update(); // Update OrbitControls 
-
-            // Rotate objects for animation
-            const delta = 0.01; 
-            if (cube) cube.rotation.x += delta;
-            if (cube) cube.rotation.y += delta;
-            if (sphere) sphere.rotation.y += delta; 
-            if (torus) torus.rotation.x -= delta;
-            if (torus) torus.rotation.y -= delta * 0.5;
-
-            renderer.render(scene, camera); // Render the scene
-        }
-
-        // ---- NEW Startup Function ----
-        function hideLoadingScreenAndStart() {
-            console.log("Hiding loading screen and starting animation..."); // Debug log
-            const loadingScreen = document.getElementById('loadingScreen');
-            if (loadingScreen) {
-                loadingScreen.classList.add('fade-out'); // Add class to trigger CSS opacity transition
-
-                // Remove the element from the DOM after the transition finishes
-                loadingScreen.addEventListener('transitionend', () => {
-                    loadingScreen.style.display = 'none'; 
-                }, { once: true }); // Use 'once: true' so the listener removes itself
-
-                // Fallback: If transition doesn't fire (e.g., element removed too quickly), 
-                // hide it after a delay slightly longer than the transition.
-                setTimeout(() => {
-                     if (loadingScreen.style.display !== 'none') { // Check if not already hidden by transitionend
-                        loadingScreen.style.display = 'none';
-                     }
-                }, 600); // 500ms transition + 100ms buffer
-            } else {
-                console.error("Loading screen element not found!");
+      // Once all resources managed by the manager have loaded
+      loadingManager.onLoad = function () {
+        loadingText.textContent = 'Load complete!';
+        // Fade out and remove loading overlay
+        setTimeout(() => {
+          loadingOverlay.classList.add('hidden');
+          setTimeout(() => {
+            if (loadingOverlay) { // Add check in case element is removed prematurely
+                loadingOverlay.style.display = 'none';
             }
-            
-            // Start the animation loop
-            animate(); 
+          }, 300); // Wait for fade transition
+        }, 500); // Show "Load complete!" for a moment
+      };
+
+      // If there's an error loading resources via the manager
+      loadingManager.onError = function (url) {
+        loadingText.textContent = `Error loading: ${url}`;
+        // Keep the overlay visible in case of error
+      };
+
+      /**********************
+       * 2) CREATE OBJECTS  *
+       **********************/
+      // Use loadingManager if you load textures or models, e.g.:
+      // const textureLoader = new THREE.TextureLoader(loadingManager);
+      // const texture = textureLoader.load('path/to/texture.jpg');
+
+      // Rotating Cube
+      const cubeGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+      const cubeMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+      cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+      cube.position.x = -3;
+      scene.add(cube);
+
+      // Rotating Sphere
+      const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+      const sphereMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+      sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      sphere.position.x = 0;
+      scene.add(sphere);
+
+      // Rotating Torus
+      const torusGeometry = new THREE.TorusGeometry(0.8, 0.3, 16, 100);
+      const torusMaterial = new THREE.MeshPhongMaterial({ color: 0x0000ff });
+      torus = new THREE.Mesh(torusGeometry, torusMaterial);
+      torus.position.x = 3;
+      scene.add(torus);
+
+      // Make them cast/receive shadows if we enable shadows (optional)
+      // renderer.shadowMap.enabled = true;
+      // directionalLight.castShadow = true;
+      // cube.castShadow = true; sphere.castShadow = true; torus.castShadow = true;
+      // // Floor to receive shadows (optional)
+      // const floorGeometry = new THREE.PlaneGeometry(20, 20);
+      // const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x808080, side: THREE.DoubleSide });
+      // const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+      // floor.rotation.x = -Math.PI / 2;
+      // floor.position.y = -2;
+      // floor.receiveShadow = true;
+      // scene.add(floor);
+
+      // Add event listeners
+      window.addEventListener('resize', onWindowResize, false);
+      window.addEventListener('mousemove', onMouseMove, false);
+      // Use 'pointerdown' for better compatibility across devices (mouse/touch/pen)
+      // window.addEventListener('touchstart', onTouchStart, false); // Keep if you ONLY want touch
+      window.addEventListener('pointerdown', onPointerDown, false); // Recommended
+
+      animate();
+    }
+
+    /***************************
+     * 3) RESPONSIVE RESIZING  *
+     ***************************/
+    function onWindowResize() {
+      // Check if camera and renderer exist before accessing properties
+      if (camera && renderer) {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    }
+
+    /**************************************
+     * 4) MOUSE & TOUCH INTERACTIVITY     *
+     **************************************/
+    function updateMouseCoords(clientX, clientY) {
+        // Convert pointer coords to normalized device coordinates (ranges from -1 to +1)
+        if (mouse) { // Check if mouse Vector2 is initialized
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
         }
+    }
 
-        // ---- Execution Start ----
-        
-        // 1. Initialize the Three.js scene setup
-        init(); 
+    function onMouseMove(event) {
+      updateMouseCoords(event.clientX, event.clientY);
+      // Optional: If you want picking to happen on hover, uncomment the next line
+      // pickObject();
+    }
 
-        // 2. Hide the loading screen and start the animation loop
-        // We call this directly now, instead of relying on LoadingManager.onLoad
-        hideLoadingScreenAndStart(); 
+    // Handles touch start specifically (if needed separately)
+    function onTouchStart(event) {
+        if (event.touches && event.touches.length > 0) {
+            const touch = event.touches[0];
+            updateMouseCoords(touch.clientX, touch.clientY);
+            pickObject(); // Perform pick on tap
+        }
+    }
 
-    </script>
+    // Consolidated handler for mouse clicks and touch taps using Pointer Events
+    function onPointerDown(event) {
+        // event.isPrimary can be used to only react to the primary pointer
+        // (e.g., first finger down, or the main mouse button)
+        if (event.isPrimary) {
+            updateMouseCoords(event.clientX, event.clientY);
+            pickObject(); // Perform pick on pointer down
+        }
+    }
+
+    // // Optional: Trigger picking on click (comment out if you want to pick on mouse move)
+    // Removed this duplicate listener as 'pointerdown' handles clicks too.
+    // document.addEventListener('click', pickObject);
+
+    function pickObject() {
+      // Ensure raycaster, mouse, camera, scene objects exist
+      if (!raycaster || !mouse || !camera || !scene || !cube || !sphere || !torus) {
+          console.warn("Picking dependencies not yet initialized.");
+          return;
+      }
+      // Raycast from camera to pointer position
+      raycaster.setFromCamera(mouse, camera);
+      // Specify only the objects we want to be selectable
+      const objectsToIntersect = [cube, sphere, torus];
+      const intersects = raycaster.intersectObjects(objectsToIntersect);
+
+      if (intersects.length > 0) {
+        // Get the first object hit
+        const object = intersects[0].object;
+
+        // Check if the object has a material with a color property
+        if (object.material && object.material.color) {
+            // Get the current color
+            const currentColor = object.material.color;
+
+            // Create an object to store HSL values
+            const hsl = { h: 0, s: 0, l: 0 };
+
+            // Get the HSL components of the current color
+            currentColor.getHSL(hsl);
+
+            // Modify the hue component (add 0.1 and wrap around using modulo 1)
+            hsl.h = (hsl.h + 0.1) % 1.0;
+
+            // Set the material's color using the modified HSL values
+            object.material.color.setHSL(hsl.h, hsl.s, hsl.l);
+        } else {
+            console.warn("Intersected object does not have a material with a color property:", object);
+        }
+      }
+    }
+
+
+    /*********************************
+     * 5) ANIMATION AND PERFORMANCE  *
+     *********************************/
+    function animate() {
+      // Only proceed if essential components are ready
+      if (!renderer || !scene || !camera || !controls) {
+          console.warn("Animation skipped: Core components not ready.");
+          // Request next frame anyway, maybe they'll be ready then
+          requestAnimationFrame(animate);
+          return;
+      }
+      requestAnimationFrame(animate);
+
+      // Rotate objects for visual interest (check if objects exist)
+      if (cube) {
+          cube.rotation.x += 0.01;
+          cube.rotation.y += 0.01;
+      }
+      if (sphere) {
+          sphere.rotation.y -= 0.01;
+      }
+      if (torus) {
+          torus.rotation.x += 0.01;
+          torus.rotation.z -= 0.01;
+      }
+
+      // Update controls (smooth damping)
+      controls.update();
+
+      // Render the scene
+      renderer.render(scene, camera);
+    }
+
+    /****************************************
+     * 6) KICK OFF EVERYTHING ON PAGE LOAD  *
+     ****************************************/
+    // Use DOMContentLoaded for faster perceived load (starts JS after HTML is parsed)
+    // Use window.onload if you need images/stylesheets fully loaded first
+    // window.onload = init; // Original
+    if (document.readyState === 'loading') { // Avoids running init twice if script is deferred
+        document.addEventListener('DOMContentLoaded', init);
+    } else { // DOMContentLoaded already fired
+        init();
+    }
+
+  </script>
 </body>
 </html>
