@@ -61,11 +61,11 @@
         // Global flag to track script loading errors
         let scriptLoadErrorOccurred = false;
         // Function to handle script loading errors
-        function scriptLoadError(scriptName) {
-            console.error(`Error loading script: ${scriptName}`);
+        function scriptLoadError(scriptName, errorEvent) {
+            console.error(`Error loading script: ${scriptName}`, errorEvent); // Log the event object too
             const infoElement = document.getElementById('info');
             if (infoElement && !scriptLoadErrorOccurred) { // Show only the first error
-                infoElement.textContent = `Error: Failed to load required script (${scriptName}). Check network connection, browser console (Network tab), and extensions. Ensure CDN is accessible.`;
+                infoElement.textContent = `Error: Failed to load required script (${scriptName}). Check console & Network tab. Ensure CDN is accessible.`;
             }
             const loadingElement = document.getElementById('loading');
             if (loadingElement) loadingElement.style.display = 'none'; // Hide loading overlay
@@ -76,17 +76,17 @@
     <script
         src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"
         defer
-        onerror="scriptLoadError('three.min.js')">
+        onerror="scriptLoadError('three.min.js', event)">
     </script>
     <script
         src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/loaders/GLTFLoader.js"
         defer
-        onerror="scriptLoadError('GLTFLoader.js')">
+        onerror="scriptLoadError('GLTFLoader.js', event)">
     </script>
      <script
         src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/controls/OrbitControls.js"
         defer
-        onerror="scriptLoadError('OrbitControls.js')">
+        onerror="scriptLoadError('OrbitControls.js', event)">
      </script>
 
 </head>
