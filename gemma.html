@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Three.js Scene</title>
+    <title>Interactive Three.js Scene (Simplified)</title>
     <style>
         /* Basic styling for body and canvas */
         body {
@@ -57,391 +57,275 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 
-    <script>
-        // Global flag to track script loading errors
-        let scriptLoadErrorOccurred = false;
-        // Function to handle script loading errors
-        function scriptLoadError(scriptName, errorEvent) {
-            console.error(`Error loading script: ${scriptName}`, errorEvent); // Log the event object too
-            const infoElement = document.getElementById('info');
-            if (infoElement && !scriptLoadErrorOccurred) { // Show only the first error
-                infoElement.textContent = `Error: Failed to load required script (${scriptName}). Check console & Network tab. Ensure CDN is accessible.`;
-            }
-            const loadingElement = document.getElementById('loading');
-            if (loadingElement) loadingElement.style.display = 'none'; // Hide loading overlay
-            scriptLoadErrorOccurred = true; // Set flag to prevent further messages
-        }
-    </script>
-
-    <script
-        src="https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.min.js"
-        defer
-        onerror="scriptLoadError('three.min.js', event)">
-    </script>
-    <script
-        src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/loaders/GLTFLoader.js"
-        defer
-        onerror="scriptLoadError('GLTFLoader.js', event)">
-    </script>
-     <script
-        src="https://cdn.jsdelivr.net/npm/three@0.161.0/examples/js/controls/OrbitControls.js"
-        defer
-        onerror="scriptLoadError('OrbitControls.js', event)">
-     </script>
-
-</head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    </head>
 <body>
     <div id="info">Loading...</div>
     <div id="loading"><p>Initializing Scene...</p></div>
 
     <script>
-        // Wait for the DOM to be fully loaded and parsed
-        document.addEventListener('DOMContentLoaded', (event) => {
+        // Declare variables in a scope accessible within this script
+        let scene, camera, renderer, raycaster, pointer, selectedObject = null;
+        const interactiveObjects = []; // Keep track of objects that can be interacted with
 
-            // If a script loading error already occurred, don't proceed
-            if (scriptLoadErrorOccurred) {
-                console.log("Initialization skipped due to script load error.");
-                // Ensure loading overlay is hidden if an error occurred very early
-                const loadingElement = document.getElementById('loading');
-            	if (loadingElement) loadingElement.style.display = 'none';
-                return;
+        /**
+         * Initializes the entire Three.js scene, camera, renderer, lights, objects, and event listeners.
+         */
+        function init() {
+            const loadingElement = document.getElementById('loading');
+            const infoElement = document.getElementById('info');
+
+            // Display loading message
+            if (loadingElement) loadingElement.style.display = 'flex'; // Show loading overlay
+            if (infoElement) infoElement.textContent = 'Initializing...';
+
+            // Check if THREE is defined *before* trying to use it
+            if (typeof THREE === 'undefined') {
+                console.error("FATAL: THREE object not defined. Core library failed to load or execute.");
+                if (infoElement) infoElement.textContent = "Error: Three.js core library failed to load. Check network connection and console.";
+                if (loadingElement) loadingElement.style.display = 'none'; // Hide loading overlay
+                return; // Stop initialization
             }
 
-            // Declare variables in a scope accessible within this event listener
-            let scene, camera, renderer, controls, raycaster, pointer, selectedObject = null;
-            const interactiveObjects = []; // Keep track of objects that can be interacted with
+            // --- Proceed with initialization now that THREE is confirmed ---
+            try {
+                // --- Basic Scene Setup ---
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x1a1a1a);
 
-            /**
-             * Initializes the entire Three.js scene, camera, renderer, lights, objects, and event listeners.
-             */
-            function init() {
-                // Check if THREE is defined *before* trying to use it
-                // This check is now secondary; the onerror handler is the primary check for loading failure.
-                if (typeof THREE === 'undefined') {
-                    // This case might occur if the script loaded but failed to execute/define THREE correctly,
-                    // or if the onerror handler somehow failed.
-                    console.error("FATAL: THREE object not defined even after DOMContentLoaded and no script load error detected. Investigate script execution.");
-                    const infoElement = document.getElementById('info');
-                    const loadingElement = document.getElementById('loading');
-                    if (infoElement) infoElement.textContent = "Error: Three.js loaded but failed to initialize. Check browser console for execution errors.";
-                    if (loadingElement) loadingElement.style.display = 'none';
-                    return; // Stop initialization
-                }
+                // --- Camera Setup ---
+                const aspect = window.innerWidth / window.innerHeight;
+                camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+                camera.position.set(0, 1.5, 5); // Position camera slightly up and back
 
-                // --- Proceed with initialization now that THREE is confirmed ---
-                try {
-                    // Optional: Check if addons loaded correctly *after* confirming THREE exists
-                     if (!THREE.GLTFLoader) {
-                        // Note: The addon scripts might define things on THREE *after* this init runs
-                        // due to defer. A more robust check might be needed later if issues persist.
-                        console.warn("THREE.GLTFLoader might not be available yet or failed to load.");
-                    }
-                    if (!THREE.OrbitControls) {
-                        console.warn("THREE.OrbitControls might not be available yet or failed to load.");
-                    }
-
-
-                    // --- Basic Scene Setup ---
-                    scene = new THREE.Scene();
-                    scene.background = new THREE.Color(0x1a1a1a);
-
-                    // --- Camera Setup ---
-                    const aspect = window.innerWidth / window.innerHeight;
-                    camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-                    camera.position.set(0, 1.5, 5);
-
-                    // --- Renderer Setup ---
-                    renderer = new THREE.WebGLRenderer({
-                        antialias: true,
-                        alpha: true // Allows for transparent background if needed
-                     });
-                    renderer.setSize(window.innerWidth, window.innerHeight);
-                    renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high-DPI screens
-                    document.body.appendChild(renderer.domElement); // Add canvas to the page
-
-                    // --- Loading Manager ---
-                    // Useful for tracking loading progress of assets (textures, models)
-                    const loadingManager = new THREE.LoadingManager(
-                        () => { // onLoad callback
-                            console.log("Loading complete!");
-                            document.getElementById('info').textContent = 'Scene Ready. Click/Tap objects.';
-                            const loadingElement = document.getElementById('loading');
-                            if (loadingElement) loadingElement.style.display = 'none';
-                        },
-                        (url, itemsLoaded, itemsTotal) => { // onProgress callback
-                            const percent = Math.round((itemsLoaded / itemsTotal) * 100);
-                            document.getElementById('info').textContent = `Loading assets: ${percent}%`;
-                            console.log(`Loading file: ${url} (${itemsLoaded}/${itemsTotal})`);
-                        },
-                        (url) => { // onError callback
-                            console.error(`Error loading file via LoadingManager: ${url}`);
-                            document.getElementById('info').textContent = `Error loading asset: ${url}`;
-                        }
-                    );
-
-                    // --- Lighting Setup ---
-                    const ambientLight = new THREE.AmbientLight(0x606060); // Soft ambient light
-                    scene.add(ambientLight);
-                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Simulate sunlight
-                    directionalLight.position.set(5, 10, 7.5);
-                    scene.add(directionalLight);
-                    const pointLight = new THREE.PointLight(0xff4400, 0.7, 50); // Optional colored light
-                    pointLight.position.set(-3, 3, 3);
-                    scene.add(pointLight);
-
-                    // --- Geometry and Materials ---
-                    const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-                    const sphereGeometry = new THREE.SphereGeometry(0.7, 32, 32);
-                    const torusKnotGeometry = new THREE.TorusKnotGeometry(0.8, 0.3, 100, 16);
-                    // Using MeshStandardMaterial for better lighting interaction
-                    const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x3399ff, roughness: 0.4, metalness: 0.2 });
-                    const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xff6600, roughness: 0.7, metalness: 0.1 });
-                    const torusKnotMaterial = new THREE.MeshStandardMaterial({ color: 0x99cc33, roughness: 0.2, metalness: 0.8 });
-
-                    // --- Creating Meshes (Objects) ---
-                    const box = new THREE.Mesh(boxGeometry, boxMaterial);
-                    box.position.set(-2.5, 0.5, 0);
-                    box.userData.originalColor = boxMaterial.color.getHex(); // Store original color
-                    box.userData.name = "Cube"; // Name for identification
-                    scene.add(box);
-                    interactiveObjects.push(box); // Add to list for raycasting
-
-                    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                    sphere.position.set(2.5, 0.7, 0);
-                    sphere.userData.originalColor = sphereMaterial.color.getHex();
-                    sphere.userData.name = "Sphere";
-                    scene.add(sphere);
-                    interactiveObjects.push(sphere);
-
-                    const torusKnot = new THREE.Mesh(torusKnotGeometry, torusKnotMaterial);
-                    torusKnot.position.set(0, 1.0, -1.5);
-                    torusKnot.userData.originalColor = torusKnotMaterial.color.getHex();
-                    torusKnot.userData.name = "Torus Knot";
-                    scene.add(torusKnot);
-                    interactiveObjects.push(torusKnot);
-
-                    // --- Raycaster for Interaction ---
-                    raycaster = new THREE.Raycaster();
-                    pointer = new THREE.Vector2(); // For storing normalized mouse/touch coordinates
-
-                    // --- Orbit Controls ---
-                    // Check if OrbitControls constructor is available (it should be added to THREE by its script)
-                    if (THREE.OrbitControls) {
-                        controls = new THREE.OrbitControls(camera, renderer.domElement);
-                        controls.enableDamping = true; // Smooth camera movement
-                        controls.dampingFactor = 0.05;
-                        controls.screenSpacePanning = false; // Pan parallel to ground plane
-                        controls.minDistance = 2; // Prevent zooming too close
-                        controls.maxDistance = 20; // Prevent zooming too far
-                        controls.maxPolarAngle = Math.PI / 1.8; // Limit vertical rotation
-                        controls.target.set(0, 0.5, 0); // Point camera towards center
-                        controls.update(); // Initial update
-                    } else {
-                         // This might still show if OrbitControls.js loads but fails execution
-                         document.getElementById('info').textContent = "Warning: Camera controls unavailable.";
-                         console.error("THREE.OrbitControls constructor not found after initialization attempt.");
-                    }
-
-
-                    // --- Event Listeners ---
-                    // Using pointer events for unified mouse/touch input
-                    window.addEventListener('pointerdown', onPointerDown);
-                    window.addEventListener('pointerup', onPointerUp);
-                    window.addEventListener('pointermove', onPointerMove);
-                    window.addEventListener('resize', onWindowResize); // Handle window resizing
-
-                    // Hide loading overlay now that basic setup is done
-                    const loadingElement = document.getElementById('loading');
-                    if (loadingElement) loadingElement.style.display = 'none';
-                    document.getElementById('info').textContent = 'Initializing...'; // Initial message
-
-                    // --- Start Animation Loop ---
-                    animate();
-
-                    // Final confirmation message if no assets were managed by LoadingManager
-                    if (loadingManager.isLoading === false) {
-                         document.getElementById('info').textContent = 'Scene Ready. Click/Tap objects.';
-                    }
-
-                } catch (error) {
-                    // --- Error Handling during Initialization ---
-                    console.error("Error during Three.js initialization:", error);
-                    const infoElement = document.getElementById('info');
-                    const loadingElement = document.getElementById('loading');
-                    if (loadingElement) loadingElement.style.display = 'none';
-
-                    // Provide specific error messages based on error type
-                    if (error instanceof WebGLRenderingContext || error.message.toLowerCase().includes('webgl')) {
-                         infoElement.textContent = "Error: WebGL is not available or failed to initialize. Please use a compatible browser/device.";
-                    } else if (error.message.includes("THREE")) {
-                         infoElement.textContent = `Error: A component of Three.js failed (${error.message}). Check console.`;
-                    } else {
-                        infoElement.textContent = "An unexpected error occurred initializing the 3D scene. Check console.";
-                    }
-
-                    // Attempt cleanup if renderer was partially created
-                    if (renderer && renderer.domElement && renderer.domElement.parentNode) {
-                        renderer.domElement.parentNode.removeChild(renderer.domElement);
-                    }
-                    return; // Exit init function to prevent calling animate
-                }
-            }
-
-            /**
-             * Handles pointer (mouse click or touch tap) down events for object interaction.
-             */
-            function onPointerDown(event) {
-                // Ensure necessary components are initialized before proceeding
-                if (!camera || !raycaster || !pointer || !interactiveObjects || interactiveObjects.length === 0) return;
-
-                // Calculate pointer position in normalized device coordinates (-1 to +1)
-                pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-                pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-                // Update the picking ray with the camera and pointer position
-                raycaster.setFromCamera(pointer, camera);
-
-                // Calculate objects intersecting the picking ray
-                const intersects = raycaster.intersectObjects(interactiveObjects);
-
-                if (intersects.length > 0) {
-                    // If an object is already selected, deselect it first unless it's the same object
-                    if (selectedObject && selectedObject !== intersects[0].object) {
-                        deselectObject();
-                    }
-                    // Select the new object (closest one) only if it's not already selected
-                    if (selectedObject !== intersects[0].object) {
-                         selectedObject = intersects[0].object;
-                         selectObject(selectedObject);
-                    }
-                } else {
-                    // If clicked on empty space, deselect the current object
-                    if (selectedObject) {
-                        deselectObject();
-                    }
-                }
-            }
-
-            /**
-             * Handles pointer up events.
-             */
-            function onPointerUp(event) {
-                // Placeholder for potential future use (e.g., ending a drag operation)
-            }
-
-            /**
-             * Handles pointer move events.
-             */
-            function onPointerMove(event) {
-                 // Ensure pointer object is initialized
-                if (!pointer) return;
-                 // Update pointer coordinates for potential hover effects or dragging
-                 pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-                 pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            }
-
-            /**
-             * Applies visual changes to indicate an object is selected.
-             * @param {THREE.Object3D} object The object to select.
-             */
-            function selectObject(object) {
-                // Basic validation
-                if (!object || !object.material || !object.userData) return;
-
-                // Ensure originalColor was stored, if not, store it now
-                if (object.userData.originalColor === undefined) {
-                     object.userData.originalColor = object.material.color.getHex();
-                     console.warn("Original color not found initially for:", object.userData.name || object.uuid);
-                }
-                // Apply highlight effect
-                object.material.color.set(0xffffff); // Set color to white
-                object.scale.set(1.15, 1.15, 1.15); // Scale up slightly
-                // Update info display
-                document.getElementById('info').textContent = `Selected: ${object.userData.name || 'Object'}`;
-            }
-
-            /**
-             * Reverts visual changes when an object is deselected.
-             */
-            function deselectObject() {
-                // Basic validation
-                if (!selectedObject || !selectedObject.material || !selectedObject.userData) return;
-
-                // Restore original color only if it was stored
-                if (selectedObject.userData.originalColor !== undefined) {
-                     selectedObject.material.color.setHex(selectedObject.userData.originalColor);
-                } else {
-                    // Fallback if original color wasn't stored (shouldn't happen with the check in selectObject)
-                    console.warn("Original color not found for deselected object:", selectedObject.userData.name || selectedObject.uuid);
-                    // Optionally set a default color here if needed
-                }
-                // Restore original scale
-                selectedObject.scale.set(1, 1, 1);
-                // Clear the selected object reference
-                selectedObject = null;
-                // Update info display
-                document.getElementById('info').textContent = 'Scene Ready. Click/Tap objects.';
-            }
-
-
-            /**
-             * Handles window resize events to keep the scene responsive.
-             */
-            function onWindowResize() {
-                // Ensure camera and renderer are initialized
-                if (!camera || !renderer) return;
-
-                // Update camera aspect ratio
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix(); // Apply the aspect ratio change
-
-                // Update renderer size and pixel ratio
+                // --- Renderer Setup ---
+                renderer = new THREE.WebGLRenderer({
+                    antialias: true,
+                    alpha: true // Allows for transparent background if needed
+                 });
                 renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.setPixelRatio(window.devicePixelRatio);
+                // Note: setPixelRatio was not explicitly in the working example, but good practice
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                document.body.appendChild(renderer.domElement); // Add canvas to the page
+
+                // --- Lighting Setup ---
+                // Using lights similar to the original goal, but check if r128 needs changes
+                const ambientLight = new THREE.AmbientLight(0x606060); // Soft ambient light
+                scene.add(ambientLight);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Simulate sunlight
+                directionalLight.position.set(5, 10, 7.5);
+                scene.add(directionalLight);
+                // Point light might require MeshStandardMaterial, let's use MeshLambertMaterial for compatibility with r128 basic lights
+                // const pointLight = new THREE.PointLight(0xff4400, 0.7, 50);
+                // pointLight.position.set(-3, 3, 3);
+                // scene.add(pointLight);
+
+                // --- Geometry and Materials (Using MeshLambertMaterial for r128 compatibility) ---
+                const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const sphereGeometry = new THREE.SphereGeometry(0.7, 32, 32); // r128 uses segmentsWidth, segmentsHeight
+                const torusKnotGeometry = new THREE.TorusKnotGeometry(0.8, 0.3, 100, 16); // r128 uses tubularSegments, radialSegments
+                // Using MeshLambertMaterial which reacts to lights but is simpler than StandardMaterial
+                const boxMaterial = new THREE.MeshLambertMaterial({ color: 0x3399ff });
+                const sphereMaterial = new THREE.MeshLambertMaterial({ color: 0xff6600 });
+                const torusKnotMaterial = new THREE.MeshLambertMaterial({ color: 0x99cc33 });
+
+                // --- Creating Meshes (Objects) ---
+                const box = new THREE.Mesh(boxGeometry, boxMaterial);
+                box.position.set(-2.5, 0.5, 0);
+                box.userData.originalColor = boxMaterial.color.getHex(); // Store original color
+                box.userData.name = "Cube"; // Name for identification
+                scene.add(box);
+                interactiveObjects.push(box); // Add to list for raycasting
+
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(2.5, 0.7, 0);
+                sphere.userData.originalColor = sphereMaterial.color.getHex();
+                sphere.userData.name = "Sphere";
+                scene.add(sphere);
+                interactiveObjects.push(sphere);
+
+                const torusKnot = new THREE.Mesh(torusKnotGeometry, torusKnotMaterial);
+                torusKnot.position.set(0, 1.0, -1.5);
+                torusKnot.userData.originalColor = torusKnotMaterial.color.getHex();
+                torusKnot.userData.name = "Torus Knot";
+                scene.add(torusKnot);
+                interactiveObjects.push(torusKnot);
+
+                // --- Raycaster for Interaction ---
+                raycaster = new THREE.Raycaster();
+                pointer = new THREE.Vector2(); // For storing normalized mouse/touch coordinates
+
+                // --- Orbit Controls REMOVED ---
+
+                // --- Event Listeners ---
+                // Using pointer events for unified mouse/touch input (requires browser support)
+                // Fallback to mouse/touch if needed, but pointer is cleaner
+                window.addEventListener('pointerdown', onPointerDown);
+                window.addEventListener('pointerup', onPointerUp);
+                window.addEventListener('pointermove', onPointerMove);
+                // Keep resize listener
+                window.addEventListener('resize', onWindowResize);
+
+                // Hide loading overlay now that basic setup is done
+                if (loadingElement) loadingElement.style.display = 'none';
+                if (infoElement) infoElement.textContent = 'Scene Ready. Click/Tap objects.';
+
+                // --- Start Animation Loop ---
+                animate();
+
+            } catch (error) {
+                // --- Error Handling during Initialization ---
+                console.error("Error during Three.js initialization:", error);
+                if (infoElement) infoElement.textContent = "An unexpected error occurred initializing the 3D scene. Check console.";
+                if (loadingElement) loadingElement.style.display = 'none'; // Hide loading overlay
+                return; // Exit init function to prevent calling animate
             }
+        }
 
-            /**
-             * The main animation loop. Called recursively via requestAnimationFrame.
-             */
-            function animate() {
-                // Stop the loop if a script loading error occurred
-                 if (scriptLoadErrorOccurred) {
-                     console.log("Animation loop stopped due to script load error.");
-                     return;
-                 }
+        /**
+         * Handles pointer (mouse click or touch tap) down events for object interaction.
+         */
+        function onPointerDown(event) {
+            // Ensure necessary components are initialized before proceeding
+            if (!camera || !raycaster || !pointer || !interactiveObjects || interactiveObjects.length === 0) return;
 
-                // Request the next frame
-                requestAnimationFrame(animate);
+            // Calculate pointer position in normalized device coordinates (-1 to +1)
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-                // Update controls (important if damping is enabled)
-                if (controls) controls.update();
+            // Update the picking ray with the camera and pointer position
+            raycaster.setFromCamera(pointer, camera);
 
-                // --- Animations --- (Rotate non-selected objects)
-                interactiveObjects.forEach((obj, index) => {
-                    if (obj !== selectedObject) { // Don't rotate the selected object
-                        obj.rotation.y += 0.005 + index * 0.001; // Vary rotation speed slightly
-                        obj.rotation.x += 0.002 + index * 0.0005;
-                    }
-                });
+            // Calculate objects intersecting the picking ray
+            const intersects = raycaster.intersectObjects(interactiveObjects);
 
-                // Render the scene from the perspective of the camera
-                // Ensure renderer, scene, and camera are valid before rendering
-                if (renderer && scene && camera) {
-                    renderer.render(scene, camera);
-                } else {
-                    // This should ideally not happen if init succeeded, but good as a safeguard
-                    console.error("Attempted to render but renderer, scene, or camera is missing.");
-                    // Optionally stop the animation loop here if rendering is impossible
-                    // scriptLoadErrorOccurred = true; // Or set the error flag
+            if (intersects.length > 0) {
+                // If an object is already selected, deselect it first unless it's the same object
+                if (selectedObject && selectedObject !== intersects[0].object) {
+                    deselectObject();
+                }
+                // Select the new object (closest one) only if it's not already selected
+                if (selectedObject !== intersects[0].object) {
+                     selectedObject = intersects[0].object;
+                     selectObject(selectedObject);
+                }
+            } else {
+                // If clicked on empty space, deselect the current object
+                if (selectedObject) {
+                    deselectObject();
                 }
             }
+        }
+
+        /**
+         * Handles pointer up events.
+         */
+        function onPointerUp(event) {
+            // Placeholder for potential future use (e.g., ending a drag operation)
+        }
+
+        /**
+         * Handles pointer move events.
+         */
+        function onPointerMove(event) {
+             // Ensure pointer object is initialized
+            if (!pointer) return;
+             // Update pointer coordinates for potential hover effects or dragging
+             pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+             pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        /**
+         * Applies visual changes to indicate an object is selected.
+         * @param {THREE.Object3D} object The object to select.
+         */
+        function selectObject(object) {
+            // Basic validation
+            if (!object || !object.material || !object.userData) return;
+
+            // Ensure originalColor was stored, if not, store it now
+            if (object.userData.originalColor === undefined) {
+                 object.userData.originalColor = object.material.color.getHex();
+                 console.warn("Original color not found initially for:", object.userData.name || object.uuid);
+            }
+            // Apply highlight effect (change color)
+            // Note: With MeshLambertMaterial, changing color might be less visually distinct than with StandardMaterial.
+            // Consider adding an outline or scaling effect as well/instead if needed.
+            object.material.color.set(0xffffff); // Set color to white
+            // object.scale.set(1.15, 1.15, 1.15); // Optional: Scale up slightly
+            // Update info display
+            document.getElementById('info').textContent = `Selected: ${object.userData.name || 'Object'}`;
+        }
+
+        /**
+         * Reverts visual changes when an object is deselected.
+         */
+        function deselectObject() {
+            // Basic validation
+            if (!selectedObject || !selectedObject.material || !selectedObject.userData) return;
+
+            // Restore original color only if it was stored
+            if (selectedObject.userData.originalColor !== undefined) {
+                 selectedObject.material.color.setHex(selectedObject.userData.originalColor);
+            } else {
+                console.warn("Original color not found for deselected object:", selectedObject.userData.name || selectedObject.uuid);
+            }
+            // Restore original scale if it was changed
+            // selectedObject.scale.set(1, 1, 1);
+            // Clear the selected object reference
+            selectedObject = null;
+            // Update info display
+            document.getElementById('info').textContent = 'Scene Ready. Click/Tap objects.';
+        }
 
 
-            // --- Start Initialization ---
-            // Call init() now that the DOM is ready. It includes checks for THREE definition and script load errors.
-            init();
+        /**
+         * Handles window resize events to keep the scene responsive.
+         */
+        function onWindowResize() {
+            // Ensure camera and renderer are initialized
+            if (!camera || !renderer) return;
 
-        }); // End of DOMContentLoaded listener
+            // Update camera aspect ratio
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix(); // Apply the aspect ratio change
+
+            // Update renderer size and pixel ratio
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Keep this optimization
+        }
+
+        /**
+         * The main animation loop. Called recursively via requestAnimationFrame.
+         */
+        function animate() {
+            // Request the next frame
+            requestAnimationFrame(animate);
+
+            // --- Orbit Controls update REMOVED ---
+
+            // --- Animations --- (Rotate non-selected objects)
+            interactiveObjects.forEach((obj, index) => {
+                if (obj !== selectedObject) { // Don't rotate the selected object
+                    obj.rotation.y += 0.005 + index * 0.001; // Vary rotation speed slightly
+                    obj.rotation.x += 0.002 + index * 0.0005;
+                }
+            });
+
+            // Render the scene from the perspective of the camera
+            // Ensure renderer, scene, and camera are valid before rendering
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            } else {
+                console.error("Attempted to render but renderer, scene, or camera is missing.");
+                // Optionally stop the animation loop here
+                // return;
+            }
+        }
+
+        // --- Start Initialization using window.onload ---
+        window.onload = init;
+
     </script>
 </body>
 </html>
