@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Interactive 3D Space Scene</title>
+    <title>Interactive 3D Scene with Three.js</title>
     <style>
         /* Reset and base styles */
         * {
@@ -13,526 +13,452 @@
         }
 
         body {
-            overflow: hidden;
             font-family: Arial, sans-serif;
-            background-color: #000;
+            overflow: hidden;
+            background-color: #222;
             color: white;
-            touch-action: none;
-        }
-
-        /* Loading screen */
-        #loading-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #000;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            transition: opacity 0.5s ease-out;
-        }
-
-        #loading-screen.fade-out {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .loader {
-            width: 50px;
-            height: 50px;
-            border: 5px solid rgba(255, 255, 255, 0.2);
-            border-radius: 50%;
-            border-top-color: #4a90e2;
-            animation: spin 1s ease-in-out infinite;
-            margin-bottom: 20px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
         }
 
         /* Canvas container */
         #canvas-container {
-            position: fixed;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+
+        /* UI elements */
+        #loading-screen {
+            position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-        }
-
-        /* UI elements */
-        #ui-container {
-            position: fixed;
-            bottom: 20px;
-            left: 0;
-            width: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
             display: flex;
+            flex-direction: column;
             justify-content: center;
+            align-items: center;
             z-index: 100;
-            pointer-events: none;
+            opacity: 1; /* Start visible */
+            transition: opacity 0.5s ease; /* Fade out transition */
         }
 
-        .ui-panel {
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 10px 15px;
-            border-radius: 20px;
-            display: flex;
-            gap: 10px;
+        #loading-bar {
+            width: 50%;
+            max-width: 300px;
+            height: 20px;
+            border: 2px solid #fff;
+            margin-top: 20px;
+            border-radius: 10px;
+            overflow: hidden;
         }
 
-        .ui-button {
-            background-color: #4a90e2;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            font-size: 18px;
-            cursor: pointer;
-            pointer-events: auto;
-            transition: transform 0.2s, background-color 0.2s;
+        #loading-progress {
+            height: 100%;
+            width: 0%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
         }
 
-        .ui-button:hover {
-            background-color: #3a7bc8;
-            transform: scale(1.1);
-        }
-
-        /* Error message */
         #error-message {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 0, 0, 0.8);
             padding: 20px;
-            background-color: rgba(255, 0, 0, 0.7);
-            color: white;
-            text-align: center;
+            border-radius: 5px;
             display: none;
-            z-index: 1000;
+            max-width: 80%;
+            text-align: center;
+            z-index: 110; /* Above loading screen */
         }
 
-        /* Mobile-specific styles */
-        @media (max-width: 768px) {
-            .ui-button {
-                width: 50px;
-                height: 50px;
-                font-size: 22px;
-            }
+        #fps-counter {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 14px;
+            z-index: 50;
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 14px;
+            text-align: center;
+            z-index: 50;
+        }
+
+        /* Cursor feedback */
+        body.interactive-cursor {
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <!-- Loading screen -->
-    <div id="loading-screen">
-        <div class="loader"></div>
-        <h2>Loading Space Scene...</h2>
-    </div>
-
-    <!-- Error message container -->
-    <div id="error-message"></div>
-
-    <!-- Canvas container -->
     <div id="canvas-container"></div>
 
-    <!-- UI controls -->
-    <div id="ui-container">
-        <div class="ui-panel">
-            <button class="ui-button" id="zoom-in">+</button>
-            <button class="ui-button" id="zoom-out">-</button>
-            <button class="ui-button" id="reset-view">↻</button>
+    <div id="loading-screen">
+        <h1>Loading 3D Scene</h1>
+        <div id="loading-bar">
+            <div id="loading-progress"></div>
         </div>
     </div>
 
-    <!-- Three.js from CDN -->
+    <div id="error-message"></div>
+    <div id="fps-counter">FPS: 0</div>
+    <div id="instructions">Click/tap objects to interact | Drag to rotate view</div>
+
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/TextureLoader.js"></script>
     <script>
         // Main application class
-        class SpaceScene {
+        class ThreeJSApp {
             constructor() {
                 // Initialize properties
                 this.scene = null;
                 this.camera = null;
                 this.renderer = null;
                 this.controls = null;
-                this.clock = null;
-                this.animationFrameId = null;
-                this.lastFrameTime = 0;
-                this.targetFrameTime = 1000 / 60; // Target 60 FPS
-                this.isMobile = /Mobi|Android/i.test(navigator.userAgent);
-                this.asteroids = [];
-                this.asteroidPool = [];
-                this.asteroidCount = 20;
-                this.planetRotationSpeed = 0.001;
-                this.spaceship = null;
-                this.spaceshipOrbitRadius = 5;
-                this.spaceshipOrbitSpeed = 0.005;
-                this.spaceshipAngle = 0;
-                this.interactiveObjects = [];
-                this.raycaster = new THREE.Raycaster();
+                this.raycaster = null;
                 this.mouse = new THREE.Vector2();
-                this.touchStartPos = null;
-                this.touchEndPos = null;
-                this.isDragging = false;
-                this.zoomFactor = 1;
-                this.maxZoom = 2;
-                this.minZoom = 0.5;
+                this.intersectedObject = null;
+                this.clock = new THREE.Clock();
+                this.frameCount = 0;
+                this.lastFpsUpdate = 0;
+                this.currentFps = 0;
+                this.isMobile = /Mobi|Android/i.test(navigator.userAgent);
+                // Adjust quality based on device performance if needed
+                this.qualityLevel = this.isMobile ? 0.75 : 1; // Lower quality slightly on mobile
+                this.interactiveObjects = [];
+                this.animationMixers = []; // Store animation mixers
+                this.loadingManager = null;
+                this.textureLoader = null;
+                this.gltfLoader = null;
 
-                // Initialize the scene
-                this.initScene();
-                this.initEventListeners();
-                this.showLoadingScreen();
+                // DOM Elements
+                this.loadingScreen = document.getElementById('loading-screen');
+                this.loadingProgress = document.getElementById('loading-progress');
+                this.errorMessage = document.getElementById('error-message');
+                this.fpsCounter = document.getElementById('fps-counter');
+                this.canvasContainer = document.getElementById('canvas-container');
+
+                // Bind 'this' context for methods used as callbacks
+                this.animate = this.animate.bind(this);
+                this.onWindowResize = this.onWindowResize.bind(this);
+                this.onPointerMove = this.onPointerMove.bind(this);
+                this.onPointerClick = this.onPointerClick.bind(this);
+
+                // Initialize the app
+                this.init();
             }
 
-            // Initialize the Three.js scene
-            initScene() {
+            // Main initialization function
+            init() {
                 try {
-                    // Create scene
-                    this.scene = new THREE.Scene();
-                    this.scene.background = new THREE.Color(0x000000);
-
-                    // Create camera
-                    const aspectRatio = window.innerWidth / window.innerHeight;
-                    this.camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
-                    this.camera.position.z = 15;
-
-                    // Create renderer
-                    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-                    this.renderer.setPixelRatio(window.devicePixelRatio);
-                    this.renderer.setSize(window.innerWidth, window.innerHeight);
-                    this.renderer.shadowMap.enabled = true;
-                    document.getElementById('canvas-container').appendChild(this.renderer.domElement);
-
-                    // Add controls (different for mobile/desktop)
-                    if (!this.isMobile) {
-                        this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-                        this.controls.enableDamping = true;
-                        this.controls.dampingFactor = 0.05;
-                        this.controls.minDistance = 5;
-                        this.controls.maxDistance = 30;
+                    // First check for WebGL support
+                    if (!this.checkWebGLSupport()) {
+                        throw new Error("WebGL is not supported or disabled in your browser. Please use a modern browser like Chrome or Firefox.");
                     }
 
-                    // Add clock for animations
-                    this.clock = new THREE.Clock();
+                    // Set up loading manager
+                    this.setupLoadingManager();
 
-                    // Add lights
-                    this.addLights();
+                    // Initialize Three.js components
+                    this.initScene();
+                    this.initCamera();
+                    this.initRenderer(); // Must be after camera
+                    this.initControls(); // Must be after camera and renderer
+                    this.initLights();
+                    this.initRaycaster();
+                    this.initLoaders(); // Initialize loaders that depend on the manager
 
-                    // Create objects
-                    this.createPlanet();
-                    this.createSpaceship();
-                    this.createAsteroidField();
+                    // Load assets (example: can be expanded)
+                    this.loadAssets();
 
-                    // Start animation loop
-                    this.animate();
+                    // Set up event listeners
+                    this.setupEventListeners();
 
-                    // Hide loading screen after a short delay to ensure everything is loaded
-                    setTimeout(() => {
-                        this.hideLoadingScreen();
-                    }, 1000);
+                    // Start the render loop (will be called by LoadingManager's onLoad)
+                    // this.animate(); // Don't call here directly, let LoadingManager handle it
 
                 } catch (error) {
-                    this.showError(`Failed to initialize scene: ${error.message}`);
-                    console.error(error);
+                    this.showError(error.message);
+                    console.error("Initialization error:", error);
+                    // Hide loading screen even if error occurs
+                    if (this.loadingScreen) this.loadingScreen.style.display = 'none';
                 }
             }
 
-            // Add lights to the scene
-            addLights() {
-                // Ambient light
-                const ambientLight = new THREE.AmbientLight(0x404040);
+            // Check for WebGL support
+            checkWebGLSupport() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    return !!(
+                        window.WebGLRenderingContext &&
+                        (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+                    );
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            // Set up loading manager with progress tracking
+            setupLoadingManager() {
+                this.loadingManager = new THREE.LoadingManager(
+                    // onLoad callback
+                    () => {
+                        console.log('All assets loaded.');
+                        setTimeout(() => {
+                            this.loadingScreen.style.opacity = '0';
+                            // Wait for fade out transition before hiding
+                            this.loadingScreen.addEventListener('transitionend', () => {
+                                this.loadingScreen.style.display = 'none';
+                            }, { once: true }); // Ensure event listener is removed after firing once
+
+                            // Start animation loop ONLY after loading is complete
+                            this.animate();
+
+                        }, 500); // Small delay to ensure 100% shows
+                    },
+                    // onProgress callback
+                    (itemUrl, loaded, total) => {
+                        const percent = total > 0 ? (loaded / total) * 100 : 0;
+                        this.loadingProgress.style.width = `${percent}%`;
+                        // console.log(`Loading: ${itemUrl} (${loaded}/${total})`);
+                    },
+                    // onError callback
+                    (url) => {
+                        this.showError(`Failed to load resource: ${url}`);
+                        console.error(`Failed to load resource: ${url}`);
+                    }
+                );
+            }
+
+            // Initialize the scene
+            initScene() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x222222);
+                // Increased fog density for more noticeable effect closer to camera
+                this.scene.fog = new THREE.FogExp2(0x222222, 0.015);
+            }
+
+            // Initialize the camera with responsive settings
+            initCamera() {
+                const aspectRatio = this.canvasContainer.clientWidth / this.canvasContainer.clientHeight;
+                this.camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
+                this.camera.position.set(0, 5, 15);
+                this.camera.lookAt(0, 0, 0); // Look at the center of the scene
+            }
+
+            // Initialize the renderer with performance settings
+            initRenderer() {
+                this.renderer = new THREE.WebGLRenderer({
+                    antialias: true, // Enable anti-aliasing
+                    powerPreference: "high-performance" // Request high performance GPU if available
+                });
+
+                // Adjust pixel ratio based on quality setting
+                this.renderer.setPixelRatio(window.devicePixelRatio * this.qualityLevel);
+                this.renderer.setSize(this.canvasContainer.clientWidth, this.canvasContainer.clientHeight);
+
+                // Enable shadows
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+
+                this.renderer.autoClear = false; // Useful if doing multi-pass rendering, but usually true is fine
+
+                // Color space and tone mapping for better visuals
+                this.renderer.outputEncoding = THREE.sRGBEncoding;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = 1.0;
+
+                this.canvasContainer.appendChild(this.renderer.domElement);
+            }
+
+            // Initialize orbit controls with damping
+            initControls() {
+                this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true; // Smooth camera movement
+                this.controls.dampingFactor = 0.05;
+                this.controls.screenSpacePanning = false; // Prevent panning vertically when rotating horizontally
+                this.controls.minDistance = 5; // Minimum zoom distance
+                this.controls.maxDistance = 50; // Maximum zoom distance
+                this.controls.maxPolarAngle = Math.PI * 0.9; // Limit vertical rotation (don't go below ground)
+                this.controls.target.set(0, 1, 0); // Set the point the camera orbits around
+                this.controls.update(); // Important after setting target
+            }
+
+            // Initialize lights
+            initLights() {
+                // Ambient light for overall illumination
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
                 this.scene.add(ambientLight);
 
-                // Directional light (sun)
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-                directionalLight.position.set(5, 5, 5);
+                // Directional light for simulating sunlight
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 15, 10);
                 directionalLight.castShadow = true;
-                directionalLight.shadow.mapSize.width = 2048;
-                directionalLight.shadow.mapSize.height = 2048;
-                this.scene.add(directionalLight);
+                // Configure shadow properties
+                directionalLight.shadow.mapSize.width = 1024; // Shadow resolution
+                directionalLight.shadow.mapSize.height = 1024;
+                directionalLight.shadow.camera.near = 0.5;
+                directionalLight.shadow.camera.far = 50;
+                directionalLight.shadow.camera.left = -15;
+                directionalLight.shadow.camera.right = 15;
+                directionalLight.shadow.camera.top = 15;
+                directionalLight.shadow.camera.bottom = -15;
 
-                // Point light (planet glow)
-                const pointLight = new THREE.PointLight(0x4a90e2, 1, 20);
-                pointLight.position.set(0, 0, 0);
+                this.scene.add(directionalLight);
+                // Optional: Add a helper to visualize the light's shadow camera
+                // const shadowHelper = new THREE.CameraHelper(directionalLight.shadow.camera);
+                // this.scene.add(shadowHelper);
+
+                // Optional: Point light for additional highlights
+                const pointLight = new THREE.PointLight(0xffccaa, 0.5, 50);
+                pointLight.position.set(-5, 5, -5);
                 this.scene.add(pointLight);
             }
 
-            // Create a procedural planet texture
-            createPlanetTexture() {
-                const canvas = document.createElement('canvas');
-                canvas.width = 512;
-                canvas.height = 512;
-                const context = canvas.getContext('2d');
-                
-                // Fill with base color
-                context.fillStyle = '#2a70c2';
-                context.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // Add some variation/clouds
-                context.fillStyle = '#4a90e2';
-                for (let i = 0; i < 20; i++) {
-                    const x = Math.random() * canvas.width;
-                    const y = Math.random() * canvas.height;
-                    const radius = 20 + Math.random() * 60;
-                    context.beginPath();
-                    context.arc(x, y, radius, 0, Math.PI * 2);
-                    context.fill();
-                }
-                
-                const texture = new THREE.CanvasTexture(canvas);
-                return texture;
+            // Initialize loaders
+            initLoaders() {
+                this.textureLoader = new THREE.TextureLoader(this.loadingManager);
+                this.gltfLoader = new THREE.GLTFLoader(this.loadingManager);
+                // Add other loaders if needed (e.g., FontLoader, DRACOLoader)
             }
 
-            // Create the central planet
-            createPlanet() {
-                // Planet geometry and material
-                const geometry = new THREE.SphereGeometry(3, 32, 32);
-                const material = new THREE.MeshPhongMaterial({
-                    color: 0x4a90e2,
-                    specular: 0x111111,
-                    shininess: 30,
-                    map: this.createPlanetTexture()
+            // Load game assets (models, textures)
+            loadAssets() {
+                // Example: Load a simple ground plane
+                const groundGeometry = new THREE.PlaneGeometry(50, 50);
+                const groundMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x555555,
+                    roughness: 0.8,
+                    metalness: 0.2
                 });
-                
-                const planet = new THREE.Mesh(geometry, material);
-                planet.castShadow = true;
-                planet.receiveShadow = true;
-                this.scene.add(planet);
-                
-                // Add atmosphere
-                const atmosphereGeometry = new THREE.SphereGeometry(3.2, 32, 32);
-                const atmosphereMaterial = new THREE.MeshPhongMaterial({
-                    color: 0x6ab0ff,
-                    transparent: true,
-                    opacity: 0.3,
-                    side: THREE.BackSide
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+                ground.receiveShadow = true; // Allow ground to receive shadows
+                this.scene.add(ground);
+
+                // Example: Load a primitive shape
+                const boxGeometry = new THREE.BoxGeometry(2, 2, 2);
+                const boxMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x00ff00, // Green
+                    roughness: 0.5,
+                    metalness: 0.1
                 });
-                const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-                this.scene.add(atmosphere);
-                
-                // Store references
-                this.planet = planet;
-                this.atmosphere = atmosphere;
+                const box = new THREE.Mesh(boxGeometry, boxMaterial);
+                box.position.set(0, 1.1, 0); // Position slightly above the ground
+                box.castShadow = true;
+                box.userData.interactive = true; // Mark as interactive
+                box.userData.name = "Green Box";
+                this.scene.add(box);
+                this.interactiveObjects.push(box); // Add to interactive list
+
+                // Example: Load another interactive shape
+                const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+                const sphereMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xff0000, // Red
+                    roughness: 0.1,
+                    metalness: 0.9
+                });
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(5, 1, 2);
+                sphere.castShadow = true;
+                sphere.userData.interactive = true;
+                sphere.userData.name = "Red Sphere";
+                this.scene.add(sphere);
+                this.interactiveObjects.push(sphere);
+
+                // Example: Placeholder for loading a GLTF model
+                // this.gltfLoader.load('path/to/your/model.gltf', (gltf) => {
+                //     const model = gltf.scene;
+                //     model.position.set(-5, 0, 0);
+                //     model.scale.set(0.5, 0.5, 0.5);
+                //     model.traverse(node => {
+                //         if (node.isMesh) {
+                //             node.castShadow = true;
+                //             node.receiveShadow = true;
+                //             // Check if parts of the model should be interactive
+                //             // if (node.name === "Button") {
+                //             //     node.userData.interactive = true;
+                //             //     this.interactiveObjects.push(node);
+                //             // }
+                //         }
+                //     });
+                //     this.scene.add(model);
+                //     // Handle animations if present
+                //     if (gltf.animations && gltf.animations.length) {
+                //         const mixer = new THREE.AnimationMixer(model);
+                //         gltf.animations.forEach((clip) => {
+                //             mixer.clipAction(clip).play();
+                //         });
+                //         this.animationMixers.push(mixer);
+                //     }
+                // }, undefined, (error) => {
+                //     console.error('An error happened loading the GLTF model:', error);
+                //     this.showError('Failed to load 3D model.');
+                // });
             }
-            
-            // Create spaceship
-            createSpaceship() {
-                // Simple spaceship geometry
-                const geometry = new THREE.ConeGeometry(0.5, 1.5, 4);
-                const material = new THREE.MeshPhongMaterial({ color: 0xffffff });
-                this.spaceship = new THREE.Mesh(geometry, material);
-                this.spaceship.rotation.x = Math.PI / 2;
-                this.scene.add(this.spaceship);
-                
-                // Position the spaceship
-                this.updateSpaceshipPosition();
+
+
+            // Initialize raycaster for interaction
+            initRaycaster() {
+                this.raycaster = new THREE.Raycaster();
             }
-            
-            // Update spaceship position in orbit
-            updateSpaceshipPosition() {
-                this.spaceshipAngle += this.spaceshipOrbitSpeed;
-                const x = Math.cos(this.spaceshipAngle) * this.spaceshipOrbitRadius;
-                const z = Math.sin(this.spaceshipAngle) * this.spaceshipOrbitRadius;
-                this.spaceship.position.set(x, 0, z);
-                
-                // Make the spaceship look in the direction of movement
-                this.spaceship.rotation.y = -this.spaceshipAngle;
+
+            // Set up event listeners
+            setupEventListeners() {
+                window.addEventListener('resize', this.onWindowResize, false);
+
+                // Use pointer events for unified mouse/touch input
+                this.renderer.domElement.addEventListener('pointermove', this.onPointerMove, false);
+                this.renderer.domElement.addEventListener('pointerdown', this.onPointerClick, false); // Use pointerdown for faster response
             }
-            
-            // Create asteroid field
-            createAsteroidField() {
-                for (let i = 0; i < this.asteroidCount; i++) {
-                    this.createAsteroid();
-                }
-            }
-            
-            // Create a single asteroid
-            createAsteroid() {
-                let asteroid;
-                
-                // Reuse from pool if available
-                if (this.asteroidPool.length > 0) {
-                    asteroid = this.asteroidPool.pop();
-                } else {
-                    // Create new asteroid
-                    const geometry = new THREE.IcosahedronGeometry(Math.random() * 0.3 + 0.2, 0);
-                    const material = new THREE.MeshPhongMaterial({
-                        color: 0x888888,
-                        flatShading: true
-                    });
-                    asteroid = new THREE.Mesh(geometry, material);
-                }
-                
-                // Randomize position
-                const distance = Math.random() * 10 + 8;
-                const angle = Math.random() * Math.PI * 2;
-                const height = (Math.random() - 0.5) * 5;
-                
-                asteroid.position.set(
-                    Math.cos(angle) * distance,
-                    height,
-                    Math.sin(angle) * distance
-                );
-                
-                // Randomize rotation
-                asteroid.rotation.set(
-                    Math.random() * Math.PI * 2,
-                    Math.random() * Math.PI * 2,
-                    Math.random() * Math.PI * 2
-                );
-                
-                // Randomize rotation speed
-                asteroid.rotationSpeed = {
-                    x: (Math.random() - 0.5) * 0.01,
-                    y: (Math.random() - 0.5) * 0.01,
-                    z: (Math.random() - 0.5) * 0.01
-                };
-                
-                // Add to scene and array
-                this.scene.add(asteroid);
-                this.asteroids.push(asteroid);
-                
-                return asteroid;
-            }
-            
-            // Initialize event listeners
-            initEventListeners() {
-                // Handle window resize
-                window.addEventListener('resize', () => this.onWindowResize(), false);
-                
-                // Mouse events for desktop
-                if (!this.isMobile) {
-                    document.addEventListener('mousemove', (event) => this.onMouseMove(event), false);
-                    document.addEventListener('click', (event) => this.onClick(event), false);
-                }
-                
-                // Touch events for mobile
-                document.addEventListener('touchstart', (event) => this.onTouchStart(event), false);
-                document.addEventListener('touchmove', (event) => this.onTouchMove(event), false);
-                document.addEventListener('touchend', (event) => this.onTouchEnd(event), false);
-                
-                // UI buttons
-                document.getElementById('zoom-in').addEventListener('click', () => this.zoomIn(), false);
-                document.getElementById('zoom-out').addEventListener('click', () => this.zoomOut(), false);
-                document.getElementById('reset-view').addEventListener('click', () => this.resetView(), false);
-            }
-            
+
             // Handle window resize
             onWindowResize() {
-                if (this.camera && this.renderer) {
-                    this.camera.aspect = window.innerWidth / window.innerHeight;
-                    this.camera.updateProjectionMatrix();
-                    this.renderer.setSize(window.innerWidth, window.innerHeight);
-                }
+                const width = this.canvasContainer.clientWidth;
+                const height = this.canvasContainer.clientHeight;
+
+                this.camera.aspect = width / height;
+                this.camera.updateProjectionMatrix();
+
+                this.renderer.setSize(width, height);
+                // Consider adjusting pixel ratio on resize if performance is critical
+                // this.renderer.setPixelRatio(window.devicePixelRatio * this.qualityLevel);
             }
-            
-            // Handle mouse movement
-            onMouseMove(event) {
-                this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Handle mouse/touch movement for hover effects
+            onPointerMove(event) {
+                // Calculate pointer position in normalized device coordinates (-1 to +1)
+                this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
+                this.mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+
+                // Check for intersections only if needed (e.g., for hover effects)
+                // This can be performance intensive, so use wisely
+                this.checkIntersections();
             }
-            
-            // Handle mouse click
-            onClick(event) {
-                // Check for intersections with interactive objects
+
+            // Check for intersections with interactive objects
+            checkIntersections() {
                 this.raycaster.setFromCamera(this.mouse, this.camera);
-                const intersects = this.raycaster.intersectObjects(this.interactiveObjects);
-                
+                const intersects = this.raycaster.intersectObjects(this.interactiveObjects, true); // true for recursive check
+
                 if (intersects.length > 0) {
-                    const object = intersects[0].object;
-                    // Handle object click
-                }
-            }
-            
-            // Handle touch start
-            onTouchStart(event) {
-                if (event.touches.length === 1) {
-                    event.preventDefault();
-                    this.touchStartPos = {
-                        x: event.touches[0].clientX,
-                        y: event.touches[0].clientY
-                    };
-                    this.isDragging = false;
-                }
-            }
-            
-            // Handle touch move
-            onTouchMove(event) {
-                if (event.touches.length === 1 && this.touchStartPos) {
-                    event.preventDefault();
-                    
-                    const deltaX = event.touches[0].clientX - this.touchStartPos.x;
-                    const deltaY = event.touches[0].clientY - this.touchStartPos.y;
-                    
-                    // If movement is significant, consider it a drag
-                    if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
-                        this.isDragging = true;
-                        
-                        // Rotate camera based on touch movement
-                        if (this.isMobile) {
-                            this.camera.position.x += deltaX * 0.01;
-                            this.camera.position.y -= deltaY * 0.01;
-                            this.camera.lookAt(0, 0, 0);
-                        }
-                        
-                        this.touchStartPos = {
-                            x: event.touches[0].clientX,
-                            y: event.touches[0].clientY
-                        };
-                    }
-                }
-            }
-            
-            // Handle touch end
-            onTouchEnd(event) {
-                if (!this.isDragging && this.touchStartPos) {
-                    // This was a tap
-                    this.mouse.x = (this.touchStartPos.x / window.innerWidth) * 2 - 1;
-                    this.mouse.y = -(this.touchStartPos.y / window.innerHeight) * 2 + 1;
-                    this.onClick(event);
-                }
-                
-                this.touchStartPos = null;
-            }
-            
-            // Zoom in button handler
-            zoomIn() {
-                if (this.zoomFactor < this.maxZoom) {
-                    this.zoomFactor += 0.1;
-                    this.updateZoom();
-                }
-            }
-            
-            // Zoom out button handler
-            zoomOut() {
-                if (this.zoomFactor > this.minZoom) {
-                    this.zoomFactor -= 0.1;
-                    this.updateZoom();
-                }
-            }
-            
-            // Reset view button handler
-            resetView() {
-                this.zoomFactor = 1;
-                this.updateZoom();
-                
-                // Reset camera position for mobile
-                if (this.isMobile) {
-                    this.camera.position.set(0, 0, 15);
-                    this.camera.lookAt(0, 0, 0);
-                } else if (this.controls) {
-                    // Reset orbit controls
-                    this.controls.reset();
-                }
-            }
-            
-            // Update zoom level
-            updateZoom() {
-                if (this.isMob
+                    // Find the closest interactive object
+                    let closestIntersected = null
