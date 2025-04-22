@@ -3,224 +3,287 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive 3D Scene with Three.js</title>
+    <title>Fixed 3D Interactive Scene (Alt CDN)</title>
     <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; }
+        /* Basic styling for body and canvas */
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            font-family: 'Inter', sans-serif; /* Use Inter font */
+            background-color: #f0f0f0; /* Light background */
+        }
+        canvas {
+            display: block; /* Remove extra space below canvas */
+            width: 100%;   /* Make canvas responsive */
+            height: 100%;  /* Make canvas responsive */
+        }
+        /* Styling for the loading/error indicator */
         #loading {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: white;
             font-family: Arial, sans-serif;
-            background: rgba(0, 0, 0, 0.8);
+            color: #333; /* Darker text for light background */
+            background: rgba(255, 255, 255, 0.8); /* Lighter background */
             padding: 20px;
-            border-radius: 10px;
-            display: none;
+            border-radius: 10px; /* Rounded corners */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+            z-index: 10; /* Ensure it's above the canvas */
+            text-align: center; /* Center text */
+            max-width: 80%; /* Prevent it from being too wide */
+        }
+        /* Styling for informational messages */
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 5; /* Below loading/error */
         }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div id="loading">Loading 3D Scene...</div>
-    <!-- Import Three.js from CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <div id="loading">Loading Scripts...</div>
+    <div id="info" style="display: none;">Move mouse/touch to highlight objects. Drag to rotate. Scroll/pinch to zoom.</div>
+
     <script>
-        // Global variables for Three.js components
-        let scene, camera, renderer, objects = [];
-        let isDragging = false, previousMousePosition = { x: 0, y: 0 };
-        let targetRotation = { x: 0, y: 0 };
-        let windowHalfX = window.innerWidth / 2;
-        let windowHalfY = window.innerHeight / 2;
-        let raycaster = new THREE.Raycaster();
+        // Global flags to track script loading success
+        window.threeJsLoaded = false;
+        window.orbitControlsLoaded = false;
+        window.scriptLoadError = null; // Store script load error message
+
+        function handleScriptError(scriptName, url) {
+            const errorMsg = `Failed to load required script: ${scriptName} from ${url}. Check network connection or script URL.`;
+            console.error(errorMsg);
+            window.scriptLoadError = errorMsg;
+            // Update loading message immediately if an error occurs
+            const loadingElement = document.getElementById('loading');
+            if (loadingElement) {
+                 loadingElement.textContent = window.scriptLoadError;
+                 loadingElement.style.color = 'red';
+                 loadingElement.style.display = 'block';
+            }
+             // Ensure info is hidden on script load error
+            const infoElement = document.getElementById('info');
+            if (infoElement) infoElement.style.display = 'none';
+        }
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+            onload="window.threeJsLoaded = true; console.log('Three.js loaded.');"
+            onerror="handleScriptError('three.min.js', this.src)"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"
+            onload="window.orbitControlsLoaded = true; console.log('OrbitControls.js loaded.');"
+            onerror="handleScriptError('OrbitControls.js', this.src)"></script>
+
+    <script>
+        // --- Global Variables ---
+        let scene, camera, renderer, controls, raycaster;
         let mouse = new THREE.Vector2();
+        let objects = [];
+        let intersectedObject = null;
+        const originalColors = new Map();
+        const highlightColor = new THREE.Color(0xffff00);
 
-        // Initialize the application
+        // --- Initialization Function ---
         function init() {
+            const loadingElement = document.getElementById('loading');
+            const infoElement = document.getElementById('info');
+
+            // *** SCRIPT LOAD CHECK AT START ***
+            if (window.scriptLoadError) {
+                 console.error("Initialization aborted due to script load error.");
+                 return; // Stop initialization
+            }
+            if (!window.threeJsLoaded || !window.orbitControlsLoaded) {
+                 // This check might be redundant now with the improved error handling, but safe to keep
+                const errorMsg = 'Error: Required scripts did not load correctly. Check console.';
+                loadingElement.textContent = errorMsg;
+                loadingElement.style.color = 'red';
+                console.error('Initialization aborted: Script load flags not set.');
+                 if (infoElement) infoElement.style.display = 'none';
+                return; // Stop initialization
+            }
+
+            loadingElement.textContent = 'Initializing Scene...';
+
             try {
-                const loadingElement = document.getElementById('loading');
-                loadingElement.style.display = 'block';
+                // 1. Check for WebGL Support
+                if (!window.WebGLRenderingContext) {
+                    throw new Error('WebGL is not supported in your browser.');
+                }
 
-                // Scene setup
+                // 2. Scene Setup
                 scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x1a1a1a);
+                scene.background = new THREE.Color(0xeeeeee);
 
-                // Camera setup with responsive field of view
-                camera = new THREE.PerspectiveCamera(
-                    75,
-                    window.innerWidth / window.innerHeight,
-                    0.1,
-                    1000
-                );
-                camera.position.z = 5;
+                // 3. Camera Setup
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.z = 10;
 
-                // Renderer setup with performance optimizations
+                // 4. Renderer Setup
                 renderer = new THREE.WebGLRenderer({ antialias: true });
                 renderer.setSize(window.innerWidth, window.innerHeight);
-                // Enable pixel ratio limiting for better performance on high-DPI displays
-                renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
                 document.body.appendChild(renderer.domElement);
 
-                // Add ambient light for basic illumination
-                const ambientLight = new THREE.AmbientLight(0x404040);
+                // 5. Lighting
+                const ambientLight = new THREE.AmbientLight(0x606060);
                 scene.add(ambientLight);
-
-                // Add directional light for dynamic shadows
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-                directionalLight.position.set(0, 1, 1);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(1, 1, 1).normalize();
                 scene.add(directionalLight);
 
-                // Create three interactive objects
-                // 1. Cube
-                const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-                const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0x4ecdc4 });
-                const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-                cube.position.x = -2;
-                cube.userData = { type: 'cube', isHovered: false };
-                scene.add(cube);
-                objects.push(cube);
+                // 6. Create Objects
+                createObjects();
 
-                // 2. Sphere
-                const sphereGeometry = new THREE.SphereGeometry(0.8, 32, 32);
-                const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xff6b6b });
-                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                sphere.position.x = 0;
-                sphere.userData = { type: 'sphere', toggled: false };
-                scene.add(sphere);
-                objects.push(sphere);
+                // 7. Controls Setup
+                if (typeof THREE.OrbitControls === 'undefined') {
+                    throw new Error('OrbitControls not available on THREE object even after script load.');
+                }
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.1;
+                controls.enableZoom = true;
 
-                // 3. Torus
-                const torusGeometry = new THREE.TorusGeometry(0.7, 0.25, 16, 64);
-                const torusMaterial = new THREE.MeshStandardMaterial({ color: 0xffe66d });
-                const torus = new THREE.Mesh(torusGeometry, torusMaterial);
-                torus.position.x = 2;
-                torus.userData = { type: 'torus', scaleUp: false };
-                scene.add(torus);
-                objects.push(torus);
+                // 8. Raycaster Setup
+                raycaster = new THREE.Raycaster();
 
-                // Event listeners for mouse and touch interactions
-                document.addEventListener('mousedown', onMouseDown, false);
-                document.addEventListener('mousemove', onMouseMove, false);
-                document.addEventListener('mouseup', onMouseUp, false);
-                document.addEventListener('touchstart', onTouchStart, false);
-                document.addEventListener('touchmove', onTouchMove, false);
-                document.addEventListener('touchend', onTouchEnd, false);
-                window.addEventListener('resize', onWindowResize, false);
+                // 9. Add Event Listeners
+                addEventListeners();
 
+                // 10. Hide Loading Indicator & Show Info
                 loadingElement.style.display = 'none';
+                if (infoElement) infoElement.style.display = 'block';
+
+                // 11. Start Animation Loop
                 animate();
+
             } catch (error) {
-                console.error('Initialization failed:', error);
-                document.getElementById('loading').textContent = 'Error loading 3D scene. Please refresh.';
+                console.error('An error occurred during initialization:', error);
+                if (loadingElement) {
+                    loadingElement.textContent = `Error during initialization: ${error.message || 'Unknown error. Check console for details.'}`;
+                    loadingElement.style.color = 'red';
+                    loadingElement.style.display = 'block';
+                }
+                if (infoElement) infoElement.style.display = 'none';
             }
         }
 
-        // Handle window resize for responsive design
+        // --- Create Scene Objects ---
+        function createObjects() {
+            const addObject = (geometry, material, position) => {
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.copy(position);
+                scene.add(mesh);
+                objects.push(mesh);
+                originalColors.set(mesh.uuid, material.color.clone());
+            };
+            const boxGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const boxMaterial = new THREE.MeshStandardMaterial({ color: 0x2196F3, roughness: 0.5, metalness: 0.3 });
+            addObject(boxGeometry, boxMaterial, new THREE.Vector3(-3, 0, 0));
+            const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+            const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xE91E63, roughness: 0.3, metalness: 0.6 });
+            addObject(sphereGeometry, sphereMaterial, new THREE.Vector3(3, 0, 0));
+            const torusKnotGeometry = new THREE.TorusKnotGeometry(0.8, 0.25, 100, 16);
+            const torusKnotMaterial = new THREE.MeshStandardMaterial({ color: 0x4CAF50, roughness: 0.7, metalness: 0.1 });
+            addObject(torusKnotGeometry, torusKnotMaterial, new THREE.Vector3(0, 2.5, 0));
+        }
+
+        // --- Event Listeners ---
+        function addEventListeners() {
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('pointermove', onPointerMove, false);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
+            renderer.domElement.addEventListener('pointerup', onPointerUp, false);
+        }
+
+        // --- Event Handlers ---
         function onWindowResize() {
-            windowHalfX = window.innerWidth / 2;
-            windowHalfY = window.innerHeight / 2;
+            if (!camera || !renderer) return;
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        // Mouse interaction handlers
-        function onMouseDown(event) {
-            event.preventDefault();
-            isDragging = true;
-            previousMousePosition = {
-                x: event.clientX - windowHalfX,
-                y: event.clientY - windowHalfY
-            };
-            checkInteraction(event.clientX, event.clientY);
+        function updatePointerCoordinates(event) {
+            if (!renderer) return;
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         }
 
-        function onMouseMove(event) {
-            if (isDragging) {
-                const deltaMove = {
-                    x: (event.clientX - windowHalfX) - previousMousePosition.x,
-                    y: (event.clientY - windowHalfY) - previousMousePosition.y
-                };
-                targetRotation.y += deltaMove.x * 0.005;
-                targetRotation.x += deltaMove.y * 0.005;
-                previousMousePosition = {
-                    x: event.clientX - windowHalfX,
-                    y: event.clientY - windowHalfY
-                };
-            }
+        function onPointerMove(event) {
+             if (!raycaster) return;
+            updatePointerCoordinates(event);
+            checkIntersection(mouse);
         }
 
-        function onMouseUp() {
-            isDragging = false;
+        function onPointerDown(event) {
+             if (!renderer || !renderer.domElement) return;
+            renderer.domElement.style.cursor = 'grabbing';
         }
 
-        // Touch interaction handlers for mobile devices
-        function onTouchStart(event) {
-            event.preventDefault();
-            if (event.touches.length === 1) {
-                isDragging = true;
-                previousMousePosition = {
-                    x: event.touches[0].clientX - windowHalfX,
-                    y: event.touches[0].clientY - windowHalfY
-                };
-                checkInteraction(event.touches[0].clientX, event.touches[0].clientY);
-            }
+        function onPointerUp(event) {
+             if (!renderer || !renderer.domElement) return;
+            renderer.domElement.style.cursor = 'grab';
         }
 
-        function onTouchMove(event) {
-            event.preventDefault();
-            if (isDragging && event.touches.length === 1) {
-                const deltaMove = {
-                    x: (event.touches[0].clientX - windowHalfX) - previousMousePosition.x,
-                    y: (event.touches[0].clientY - windowHalfY) - previousMousePosition.y
-                };
-                targetRotation.y += deltaMove.x * 0.005;
-                targetRotation.x += deltaMove.y * 0.005;
-                previousMousePosition = {
-                    x: event.touches[0].clientX - windowHalfX,
-                    y: event.touches[0].clientY - windowHalfY
-                };
-            }
-        }
+        // --- Intersection Logic ---
+        function checkIntersection(pointerCoords, isClick = false) {
+             if (!raycaster || !camera || !objects || !renderer || !renderer.domElement || !controls) return;
 
-        function onTouchEnd() {
-            isDragging = false;
-        }
-
-        // Check for object interaction
-        function checkInteraction(x, y) {
-            mouse.x = (x / window.innerWidth) * 2 - 1;
-            mouse.y = -(y / window.innerHeight) * 2 + 1;
-            raycaster.setFromCamera(mouse, camera);
+            raycaster.setFromCamera(pointerCoords, camera);
             const intersects = raycaster.intersectObjects(objects);
+
             if (intersects.length > 0) {
-                const object = intersects[0].object;
-                if (object.userData.type === 'sphere') {
-                    object.userData.toggled = !object.userData.toggled;
-                    object.material.color.set(object.userData.toggled ? 0x5f27cd : 0xff6b6b);
-                } else if (object.userData.type === 'torus') {
-                    object.userData.scaleUp = true;
+                const firstIntersected = intersects[0].object;
+                if (intersectedObject !== firstIntersected) {
+                    resetPreviousObject();
+                    intersectedObject = firstIntersected;
+                    intersectedObject.material.color.copy(highlightColor);
+                    intersectedObject.scale.set(1.1, 1.1, 1.1);
+                    renderer.domElement.style.cursor = 'pointer';
                 }
+                 if (isClick && intersectedObject) {
+                     console.log("Clicked on:", intersectedObject.uuid);
+                 }
+            } else {
+                resetPreviousObject();
+                renderer.domElement.style.cursor = controls.enabled ? 'grab' : 'default';
             }
         }
 
-        // Animation loop with performance optimizations
+        // Helper function to reset the previously highlighted object
+        function resetPreviousObject() {
+            if (intersectedObject) {
+                const originalColor = originalColors.get(intersectedObject.uuid);
+                if (originalColor) {
+                    intersectedObject.material.color.copy(originalColor);
+                }
+                intersectedObject.scale.set(1, 1, 1);
+                intersectedObject = null;
+            }
+        }
+
+        // --- Animation Loop ---
         function animate() {
+             if (!renderer || !scene || !camera || !controls) return;
             requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
 
-            // Update cube rotations with smooth damping
-            targetRotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotation.x));
-            scene.rotation.x += (targetRotation.x - scene.rotation.x) * 0.1;
-            scene.rotation.y += (targetRotation.y - scene.rotation.y) * 0.1;
+        // --- Start Application ---
+        window.onload = init;
 
-            // Animate individual objects
-            objects.forEach((object, index) => {
-                if (object.userData.type === 'cube') {
-                    object.rotation.x += 0.01 * (index + 1);
-                    object.rotation.y += 0.005 * (index + 1);
-                    object.material.emissive.set(object.userData.isHovered ? 0x00d9ff : 0x000000);
-                } else if (object.userData.type === 'sphere') {
-                    object.position.y = Math.sin(Date.now() * 0.001) * 0.45;
-                } else if (object.userData.type === 'torus') {
-
-              
+    </script>
+</body>
+</html>
