@@ -14,9 +14,12 @@
 
         body {
             font-family: Arial, sans-serif;
+            /* Prevent scrollbars caused by canvas */
             overflow: hidden;
             background-color: #222;
             color: white;
+            /* Ensure touch events work smoothly */
+            touch-action: none;
         }
 
         /* Canvas container */
@@ -41,8 +44,9 @@
             justify-content: center;
             align-items: center;
             z-index: 100;
-            opacity: 1; /* Start visible */
-            transition: opacity 0.5s ease; /* Fade out transition */
+            transition: opacity 0.5s ease-out; /* Smooth fade out */
+            /* Ensure it's visible initially */
+            opacity: 1;
         }
 
         #loading-bar {
@@ -70,10 +74,10 @@
             background-color: rgba(255, 0, 0, 0.8);
             padding: 20px;
             border-radius: 5px;
-            display: none;
+            display: none; /* Hidden by default */
             max-width: 80%;
             text-align: center;
-            z-index: 110; /* Above loading screen */
+            z-index: 101; /* Above loading screen */
         }
 
         #fps-counter {
@@ -84,7 +88,7 @@
             padding: 5px 10px;
             border-radius: 3px;
             font-size: 14px;
-            z-index: 50;
+            z-index: 50; /* Above canvas, below loading/error */
         }
 
         #instructions {
@@ -100,7 +104,7 @@
             z-index: 50;
         }
 
-        /* Cursor feedback */
+        /* Cursor feedback for interactive elements */
         body.interactive-cursor {
             cursor: pointer;
         }
@@ -124,341 +128,431 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/TextureLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/LoadingManager.js"></script>
+
     <script>
-        // Main application class
-        class ThreeJSApp {
-            constructor() {
-                // Initialize properties
-                this.scene = null;
-                this.camera = null;
-                this.renderer = null;
-                this.controls = null;
-                this.raycaster = null;
-                this.mouse = new THREE.Vector2();
-                this.intersectedObject = null;
-                this.clock = new THREE.Clock();
-                this.frameCount = 0;
-                this.lastFpsUpdate = 0;
-                this.currentFps = 0;
-                this.isMobile = /Mobi|Android/i.test(navigator.userAgent);
-                // Adjust quality based on device performance if needed
-                this.qualityLevel = this.isMobile ? 0.75 : 1; // Lower quality slightly on mobile
-                this.interactiveObjects = [];
-                this.animationMixers = []; // Store animation mixers
-                this.loadingManager = null;
-                this.textureLoader = null;
-                this.gltfLoader = null;
+        // Ensure THREE is loaded before using it
+        if (typeof THREE === 'undefined') {
+            document.getElementById('error-message').textContent = 'Error: THREE.js library failed to load. Check network connection and CDN links.';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('loading-screen').style.display = 'none'; // Hide loading if THREE fails
+        } else {
+            // Main application class
+            class ThreeJSApp {
+                constructor() {
+                    // Initialize properties
+                    this.scene = null;
+                    this.camera = null;
+                    this.renderer = null;
+                    this.controls = null;
+                    this.raycaster = null;
+                    this.mouse = new THREE.Vector2();
+                    this.intersectedObject = null;
+                    this.clock = new THREE.Clock();
+                    this.frameCount = 0;
+                    this.lastFpsUpdate = 0;
+                    this.currentFps = 0;
+                    this.isMobile = /Mobi|Android/i.test(navigator.userAgent);
+                    this.qualityLevel = this.isMobile ? 0.75 : 1;
+                    this.interactiveObjects = [];
+                    this.animationObjects = [];
+                    this.loadingManager = null;
+                    this.textureLoader = null;
+                    this.isLoadingComplete = false; // Flag to track loading status
 
-                // DOM Elements
-                this.loadingScreen = document.getElementById('loading-screen');
-                this.loadingProgress = document.getElementById('loading-progress');
-                this.errorMessage = document.getElementById('error-message');
-                this.fpsCounter = document.getElementById('fps-counter');
-                this.canvasContainer = document.getElementById('canvas-container');
+                    // Bind methods
+                    this.onWindowResize = this.onWindowResize.bind(this);
+                    this.onMouseMove = this.onMouseMove.bind(this);
+                    this.onClick = this.onClick.bind(this);
+                    this.onTouchStart = this.onTouchStart.bind(this);
+                    this.animate = this.animate.bind(this);
+                    this.hideLoadingScreen = this.hideLoadingScreen.bind(this); // Bind the new method
 
-                // Bind 'this' context for methods used as callbacks
-                this.animate = this.animate.bind(this);
-                this.onWindowResize = this.onWindowResize.bind(this);
-                this.onPointerMove = this.onPointerMove.bind(this);
-                this.onPointerClick = this.onPointerClick.bind(this);
-
-                // Initialize the app
-                this.init();
-            }
-
-            // Main initialization function
-            init() {
-                try {
-                    // First check for WebGL support
-                    if (!this.checkWebGLSupport()) {
-                        throw new Error("WebGL is not supported or disabled in your browser. Please use a modern browser like Chrome or Firefox.");
-                    }
-
-                    // Set up loading manager
-                    this.setupLoadingManager();
-
-                    // Initialize Three.js components
-                    this.initScene();
-                    this.initCamera();
-                    this.initRenderer(); // Must be after camera
-                    this.initControls(); // Must be after camera and renderer
-                    this.initLights();
-                    this.initRaycaster();
-                    this.initLoaders(); // Initialize loaders that depend on the manager
-
-                    // Load assets (example: can be expanded)
-                    this.loadAssets();
-
-                    // Set up event listeners
-                    this.setupEventListeners();
-
-                    // Start the render loop (will be called by LoadingManager's onLoad)
-                    // this.animate(); // Don't call here directly, let LoadingManager handle it
-
-                } catch (error) {
-                    this.showError(error.message);
-                    console.error("Initialization error:", error);
-                    // Hide loading screen even if error occurs
-                    if (this.loadingScreen) this.loadingScreen.style.display = 'none';
+                    // Initialize
+                    this.init();
                 }
-            }
 
-            // Check for WebGL support
-            checkWebGLSupport() {
-                try {
-                    const canvas = document.createElement('canvas');
-                    return !!(
-                        window.WebGLRenderingContext &&
-                        (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
-                    );
-                } catch (e) {
-                    return false;
-                }
-            }
+                // Helper function to hide the loading screen
+                hideLoadingScreen() {
+                    // Prevent hiding multiple times or if already hidden
+                    if (this.isLoadingComplete) return;
+                     const loadingScreen = document.getElementById('loading-screen');
+                     // Ensure element exists before manipulating
+                    if (loadingScreen && loadingScreen.style.display !== 'none') {
+                        console.log('Hiding loading screen...');
+                        this.isLoadingComplete = true; // Set flag
+                        loadingScreen.style.opacity = '0';
 
-            // Set up loading manager with progress tracking
-            setupLoadingManager() {
-                this.loadingManager = new THREE.LoadingManager(
-                    // onLoad callback
-                    () => {
-                        console.log('All assets loaded.');
+                        // Use transitionend event to set display: none after fade-out
+                        loadingScreen.addEventListener('transitionend', () => {
+                            loadingScreen.style.display = 'none';
+                        }, { once: true }); // Listener runs only once
+
+                        // Fallback timeout in case transitionend doesn't fire
                         setTimeout(() => {
-                            this.loadingScreen.style.opacity = '0';
-                            // Wait for fade out transition before hiding
-                            this.loadingScreen.addEventListener('transitionend', () => {
-                                this.loadingScreen.style.display = 'none';
-                            }, { once: true }); // Ensure event listener is removed after firing once
-
-                            // Start animation loop ONLY after loading is complete
-                            this.animate();
-
-                        }, 500); // Small delay to ensure 100% shows
-                    },
-                    // onProgress callback
-                    (itemUrl, loaded, total) => {
-                        const percent = total > 0 ? (loaded / total) * 100 : 0;
-                        this.loadingProgress.style.width = `${percent}%`;
-                        // console.log(`Loading: ${itemUrl} (${loaded}/${total})`);
-                    },
-                    // onError callback
-                    (url) => {
-                        this.showError(`Failed to load resource: ${url}`);
-                        console.error(`Failed to load resource: ${url}`);
+                            if (loadingScreen.style.display !== 'none') {
+                                console.log("Transition fallback: hiding loading screen.");
+                                loadingScreen.style.display = 'none';
+                            }
+                        }, 600); // Slightly longer than CSS transition
                     }
-                );
-            }
-
-            // Initialize the scene
-            initScene() {
-                this.scene = new THREE.Scene();
-                this.scene.background = new THREE.Color(0x222222);
-                // Increased fog density for more noticeable effect closer to camera
-                this.scene.fog = new THREE.FogExp2(0x222222, 0.015);
-            }
-
-            // Initialize the camera with responsive settings
-            initCamera() {
-                const aspectRatio = this.canvasContainer.clientWidth / this.canvasContainer.clientHeight;
-                this.camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
-                this.camera.position.set(0, 5, 15);
-                this.camera.lookAt(0, 0, 0); // Look at the center of the scene
-            }
-
-            // Initialize the renderer with performance settings
-            initRenderer() {
-                this.renderer = new THREE.WebGLRenderer({
-                    antialias: true, // Enable anti-aliasing
-                    powerPreference: "high-performance" // Request high performance GPU if available
-                });
-
-                // Adjust pixel ratio based on quality setting
-                this.renderer.setPixelRatio(window.devicePixelRatio * this.qualityLevel);
-                this.renderer.setSize(this.canvasContainer.clientWidth, this.canvasContainer.clientHeight);
-
-                // Enable shadows
-                this.renderer.shadowMap.enabled = true;
-                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
-
-                this.renderer.autoClear = false; // Useful if doing multi-pass rendering, but usually true is fine
-
-                // Color space and tone mapping for better visuals
-                this.renderer.outputEncoding = THREE.sRGBEncoding;
-                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-                this.renderer.toneMappingExposure = 1.0;
-
-                this.canvasContainer.appendChild(this.renderer.domElement);
-            }
-
-            // Initialize orbit controls with damping
-            initControls() {
-                this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-                this.controls.enableDamping = true; // Smooth camera movement
-                this.controls.dampingFactor = 0.05;
-                this.controls.screenSpacePanning = false; // Prevent panning vertically when rotating horizontally
-                this.controls.minDistance = 5; // Minimum zoom distance
-                this.controls.maxDistance = 50; // Maximum zoom distance
-                this.controls.maxPolarAngle = Math.PI * 0.9; // Limit vertical rotation (don't go below ground)
-                this.controls.target.set(0, 1, 0); // Set the point the camera orbits around
-                this.controls.update(); // Important after setting target
-            }
-
-            // Initialize lights
-            initLights() {
-                // Ambient light for overall illumination
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-                this.scene.add(ambientLight);
-
-                // Directional light for simulating sunlight
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(10, 15, 10);
-                directionalLight.castShadow = true;
-                // Configure shadow properties
-                directionalLight.shadow.mapSize.width = 1024; // Shadow resolution
-                directionalLight.shadow.mapSize.height = 1024;
-                directionalLight.shadow.camera.near = 0.5;
-                directionalLight.shadow.camera.far = 50;
-                directionalLight.shadow.camera.left = -15;
-                directionalLight.shadow.camera.right = 15;
-                directionalLight.shadow.camera.top = 15;
-                directionalLight.shadow.camera.bottom = -15;
-
-                this.scene.add(directionalLight);
-                // Optional: Add a helper to visualize the light's shadow camera
-                // const shadowHelper = new THREE.CameraHelper(directionalLight.shadow.camera);
-                // this.scene.add(shadowHelper);
-
-                // Optional: Point light for additional highlights
-                const pointLight = new THREE.PointLight(0xffccaa, 0.5, 50);
-                pointLight.position.set(-5, 5, -5);
-                this.scene.add(pointLight);
-            }
-
-            // Initialize loaders
-            initLoaders() {
-                this.textureLoader = new THREE.TextureLoader(this.loadingManager);
-                this.gltfLoader = new THREE.GLTFLoader(this.loadingManager);
-                // Add other loaders if needed (e.g., FontLoader, DRACOLoader)
-            }
-
-            // Load game assets (models, textures)
-            loadAssets() {
-                // Example: Load a simple ground plane
-                const groundGeometry = new THREE.PlaneGeometry(50, 50);
-                const groundMaterial = new THREE.MeshStandardMaterial({
-                    color: 0x555555,
-                    roughness: 0.8,
-                    metalness: 0.2
-                });
-                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-                ground.rotation.x = -Math.PI / 2; // Rotate to be horizontal
-                ground.receiveShadow = true; // Allow ground to receive shadows
-                this.scene.add(ground);
-
-                // Example: Load a primitive shape
-                const boxGeometry = new THREE.BoxGeometry(2, 2, 2);
-                const boxMaterial = new THREE.MeshStandardMaterial({
-                    color: 0x00ff00, // Green
-                    roughness: 0.5,
-                    metalness: 0.1
-                });
-                const box = new THREE.Mesh(boxGeometry, boxMaterial);
-                box.position.set(0, 1.1, 0); // Position slightly above the ground
-                box.castShadow = true;
-                box.userData.interactive = true; // Mark as interactive
-                box.userData.name = "Green Box";
-                this.scene.add(box);
-                this.interactiveObjects.push(box); // Add to interactive list
-
-                // Example: Load another interactive shape
-                const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
-                const sphereMaterial = new THREE.MeshStandardMaterial({
-                    color: 0xff0000, // Red
-                    roughness: 0.1,
-                    metalness: 0.9
-                });
-                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-                sphere.position.set(5, 1, 2);
-                sphere.castShadow = true;
-                sphere.userData.interactive = true;
-                sphere.userData.name = "Red Sphere";
-                this.scene.add(sphere);
-                this.interactiveObjects.push(sphere);
-
-                // Example: Placeholder for loading a GLTF model
-                // this.gltfLoader.load('path/to/your/model.gltf', (gltf) => {
-                //     const model = gltf.scene;
-                //     model.position.set(-5, 0, 0);
-                //     model.scale.set(0.5, 0.5, 0.5);
-                //     model.traverse(node => {
-                //         if (node.isMesh) {
-                //             node.castShadow = true;
-                //             node.receiveShadow = true;
-                //             // Check if parts of the model should be interactive
-                //             // if (node.name === "Button") {
-                //             //     node.userData.interactive = true;
-                //             //     this.interactiveObjects.push(node);
-                //             // }
-                //         }
-                //     });
-                //     this.scene.add(model);
-                //     // Handle animations if present
-                //     if (gltf.animations && gltf.animations.length) {
-                //         const mixer = new THREE.AnimationMixer(model);
-                //         gltf.animations.forEach((clip) => {
-                //             mixer.clipAction(clip).play();
-                //         });
-                //         this.animationMixers.push(mixer);
-                //     }
-                // }, undefined, (error) => {
-                //     console.error('An error happened loading the GLTF model:', error);
-                //     this.showError('Failed to load 3D model.');
-                // });
-            }
+                }
 
 
-            // Initialize raycaster for interaction
-            initRaycaster() {
-                this.raycaster = new THREE.Raycaster();
-            }
+                // Main initialization function
+                init() {
+                    try {
+                        if (!this.checkWebGLSupport()) {
+                            throw new Error("WebGL is not supported or disabled in your browser.");
+                        }
 
-            // Set up event listeners
-            setupEventListeners() {
-                window.addEventListener('resize', this.onWindowResize, false);
+                        this.setupLoadingManager(); // Setup manager first
 
-                // Use pointer events for unified mouse/touch input
-                this.renderer.domElement.addEventListener('pointermove', this.onPointerMove, false);
-                this.renderer.domElement.addEventListener('pointerdown', this.onPointerClick, false); // Use pointerdown for faster response
-            }
+                        this.initScene();
+                        this.initCamera();
+                        this.initRenderer();
+                        this.initControls();
+                        this.initLights();
+                        this.initObjects(); // Create objects (may or may not use loader)
+                        this.initRaycaster();
+                        this.setupEventListeners();
 
-            // Handle window resize
-            onWindowResize() {
-                const width = this.canvasContainer.clientWidth;
-                const height = this.canvasContainer.clientHeight;
+                        // *** Crucial Change: Call hideLoadingScreen here ***
+                        // This ensures it hides even if initObjects doesn't load anything
+                        // via the loadingManager. If assets *are* loaded later,
+                        // the manager's onLoad will call it again, but the flag prevents issues.
+                        this.hideLoadingScreen();
 
-                this.camera.aspect = width / height;
-                this.camera.updateProjectionMatrix();
+                        this.animate(); // Start animation loop
 
-                this.renderer.setSize(width, height);
-                // Consider adjusting pixel ratio on resize if performance is critical
-                // this.renderer.setPixelRatio(window.devicePixelRatio * this.qualityLevel);
-            }
+                    } catch (error) {
+                        this.showError(error.message);
+                        console.error("Initialization error:", error);
+                        // Force hide loading screen on error
+                         const loadingScreen = document.getElementById('loading-screen');
+                         if(loadingScreen) loadingScreen.style.display = 'none';
+                    }
+                }
 
-            // Handle mouse/touch movement for hover effects
-            onPointerMove(event) {
-                // Calculate pointer position in normalized device coordinates (-1 to +1)
-                this.mouse.x = (event.clientX / this.renderer.domElement.clientWidth) * 2 - 1;
-                this.mouse.y = -(event.clientY / this.renderer.domElement.clientHeight) * 2 + 1;
+                checkWebGLSupport() {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+                    } catch (e) { return false; }
+                }
 
-                // Check for intersections only if needed (e.g., for hover effects)
-                // This can be performance intensive, so use wisely
-                this.checkIntersections();
-            }
+                setupLoadingManager() {
+                    const loadingProgress = document.getElementById('loading-progress');
 
-            // Check for intersections with interactive objects
-            checkIntersections() {
-                this.raycaster.setFromCamera(this.mouse, this.camera);
-                const intersects = this.raycaster.intersectObjects(this.interactiveObjects, true); // true for recursive check
+                    this.loadingManager = new THREE.LoadingManager(
+                        // onLoad: Called *only* when all managed assets are loaded
+                        () => {
+                            console.log('Loading complete via LoadingManager!');
+                            this.hideLoadingScreen(); // Use the helper function
+                        },
+                        // onProgress
+                        (itemUrl, itemsLoaded, itemsTotal) => {
+                            const percentComplete = itemsTotal > 0 ? (itemsLoaded / itemsTotal) * 100 : 100;
+                            if (loadingProgress) loadingProgress.style.width = `${percentComplete}%`;
+                            console.log(`Loading asset: ${itemUrl} (${itemsLoaded}/${itemsTotal})`);
+                        },
+                        // onError
+                        (url) => {
+                            console.error(`Error loading ${url}`);
+                            this.showError(`Failed to load resource: ${url}`);
+                             // Force hide loading screen on loading error
+                            const loadingScreen = document.getElementById('loading-screen');
+                            if(loadingScreen) loadingScreen.style.display = 'none';
+                        }
+                    );
 
-                if (intersects.length > 0) {
-                    // Find the closest interactive object
-                    let closestIntersected = null
+                    // Initialize loaders *with* the manager
+                    this.textureLoader = new THREE.TextureLoader(this.loadingManager);
+                    // Example: If you were loading models:
+                    // this.gltfLoader = new THREE.GLTFLoader(this.loadingManager);
+                }
+
+                initScene() {
+                    this.scene = new THREE.Scene();
+                    this.scene.background = new THREE.Color(0x1a1a1a);
+                    this.scene.fog = new THREE.FogExp2(0x1a1a1a, 0.015);
+                }
+
+                initCamera() {
+                    const aspectRatio = window.innerWidth / window.innerHeight;
+                    this.camera = new THREE.PerspectiveCamera(50, aspectRatio, 0.1, 1000);
+                    this.camera.position.set(0, 10, 25);
+                    this.camera.lookAt(this.scene.position);
+                }
+
+                initRenderer() {
+                    const canvasContainer = document.getElementById('canvas-container');
+                    this.renderer = new THREE.WebGLRenderer({
+                        antialias: true,
+                        alpha: true,
+                        powerPreference: "high-performance"
+                    });
+                    this.renderer.setPixelRatio(window.devicePixelRatio * this.qualityLevel);
+                    this.renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+                    this.renderer.shadowMap.enabled = true;
+                    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                    this.renderer.outputEncoding = THREE.sRGBEncoding;
+                    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                    this.renderer.toneMappingExposure = 1.0;
+                    canvasContainer.appendChild(this.renderer.domElement);
+                }
+
+                initControls() {
+                    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                    this.controls.enableDamping = true;
+                    this.controls.dampingFactor = 0.05;
+                    this.controls.screenSpacePanning = false;
+                    this.controls.minDistance = 5;
+                    this.controls.maxDistance = 100;
+                    this.controls.maxPolarAngle = Math.PI * 0.85;
+                    this.controls.minPolarAngle = Math.PI * 0.1;
+                    this.controls.target.set(0, 1, 0);
+                    this.controls.update();
+                }
+
+                initLights() {
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                    this.scene.add(ambientLight);
+
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(10, 20, 15);
+                    directionalLight.castShadow = true;
+                    directionalLight.shadow.mapSize.width = 1024;
+                    directionalLight.shadow.mapSize.height = 1024;
+                    directionalLight.shadow.camera.near = 0.5;
+                    directionalLight.shadow.camera.far = 50;
+                    directionalLight.shadow.camera.left = -15;
+                    directionalLight.shadow.camera.right = 15;
+                    directionalLight.shadow.camera.top = 15;
+                    directionalLight.shadow.camera.bottom = -15;
+                    this.scene.add(directionalLight);
+                }
+
+                initObjects() {
+                    // Ground plane
+                    const planeGeometry = new THREE.PlaneGeometry(50, 50);
+                    const planeMaterial = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8, metalness: 0.2 });
+                    const groundPlane = new THREE.Mesh(planeGeometry, planeMaterial);
+                    groundPlane.rotation.x = -Math.PI / 2;
+                    groundPlane.position.y = -0.5;
+                    groundPlane.receiveShadow = true;
+                    this.scene.add(groundPlane);
+
+                    // Interactive cube
+                    const cubeGeometry = new THREE.BoxGeometry(2, 2, 2);
+                    const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.5, metalness: 0.1 });
+                    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                    cube.position.set(0, 1.5, 0);
+                    cube.castShadow = true;
+                    cube.userData = { interactive: true, name: "Green Cube" }; // Simplified userData
+                    this.scene.add(cube);
+                    this.interactiveObjects.push(cube);
+                    // this.animationObjects.push(cube); // Uncomment if cube needs animation
+
+                     // Interactive sphere
+                    const sphereGeometry = new THREE.SphereGeometry(1.5, 32, 32);
+                    const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.2, metalness: 0.8 });
+                    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                    sphere.position.set(5, 1.5, -2);
+                    sphere.castShadow = true;
+                    sphere.userData = { interactive: true, name: "Red Sphere" };
+                    this.scene.add(sphere);
+                    this.interactiveObjects.push(sphere);
+
+                    // *** Example of using the loader (currently commented out) ***
+                    // If you uncomment this, the LoadingManager *will* be used.
+                    /*
+                    const texture = this.textureLoader.load(
+                        'https://threejs.org/examples/textures/uv_grid_opengl.jpg', // Example texture URL
+                        () => { console.log("Texture loaded successfully!"); }, // Optional onLoad for this specific texture
+                        undefined, // Optional onProgress for this texture
+                        (err) => { console.error("Error loading texture:", err); } // Optional onError for this texture
+                    );
+                    const texturedCubeMat = new THREE.MeshStandardMaterial({ map: texture });
+                    const texturedCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), texturedCubeMat);
+                    texturedCube.position.set(-5, 1.5, -2);
+                    texturedCube.castShadow = true;
+                    texturedCube.userData = { interactive: true, name: "Textured Cube" };
+                    this.scene.add(texturedCube);
+                    this.interactiveObjects.push(texturedCube);
+                    */
+                }
+
+                initRaycaster() {
+                    this.raycaster = new THREE.Raycaster();
+                }
+
+                setupEventListeners() {
+                    window.addEventListener('resize', this.onWindowResize, false);
+                    this.renderer.domElement.addEventListener('pointermove', this.onMouseMove, false);
+                    this.renderer.domElement.addEventListener('pointerdown', this.onClick, false);
+                    // Add touchstart listener for mobile interaction reliability
+                    this.renderer.domElement.addEventListener('touchstart', this.onTouchStart, { passive: false });
+                }
+
+                onWindowResize() {
+                    const canvasContainer = document.getElementById('canvas-container');
+                    const width = canvasContainer.clientWidth;
+                    const height = canvasContainer.clientHeight;
+                    this.camera.aspect = width / height;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(width, height);
+                    this.renderer.setPixelRatio(window.devicePixelRatio * this.qualityLevel);
+                }
+
+                onMouseMove(event) {
+                    // Debounce or throttle this if performance becomes an issue
+                    this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                    this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                    this.updateIntersections();
+                }
+
+                 // Separate intersection logic for reuse
+                updateIntersections() {
+                     if (!this.raycaster || !this.camera || !this.interactiveObjects) return; // Guard clause
+
+                    this.raycaster.setFromCamera(this.mouse, this.camera);
+                    const intersects = this.raycaster.intersectObjects(this.interactiveObjects);
+
+                    if (intersects.length > 0) {
+                        const firstIntersect = intersects[0].object;
+                        if (this.intersectedObject !== firstIntersect) {
+                            // Clear previous intersection effect (if any)
+                            if (this.intersectedObject && this.intersectedObject.material.emissive) {
+                                // this.intersectedObject.material.emissive.setHex(0x000000); // Example: remove emissive highlight
+                            }
+                            this.intersectedObject = firstIntersect;
+                            // Apply new intersection effect (if any)
+                             if (this.intersectedObject.material.emissive) {
+                                // this.intersectedObject.material.emissive.setHex(0x555555); // Example: add emissive highlight
+                            }
+                            document.body.classList.add('interactive-cursor');
+                        }
+                    } else {
+                        if (this.intersectedObject) {
+                             // Clear previous intersection effect (if any)
+                             if (this.intersectedObject.material.emissive) {
+                                // this.intersectedObject.material.emissive.setHex(0x000000);
+                            }
+                        }
+                        this.intersectedObject = null;
+                        document.body.classList.remove('interactive-cursor');
+                    }
+                }
+
+
+                onClick(event) {
+                    // Update mouse coords for click accuracy
+                    this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                    this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                    this.updateIntersections(); // Ensure intersection data is current
+
+                    if (this.intersectedObject) {
+                        console.log(`Clicked on: ${this.intersectedObject.userData.name || 'Unnamed Object'}`);
+                        // Example interaction: Change color
+                        if (this.intersectedObject.material.color) {
+                            this.intersectedObject.material.color.set(Math.random() * 0xffffff);
+                        }
+                    }
+                }
+
+                onTouchStart(event) {
+                    event.preventDefault(); // Prevent scrolling/zooming on canvas touch
+                    const touch = event.touches[0];
+                    this.mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+                    this.mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+
+                    // Perform raycasting immediately on touch start
+                    this.updateIntersections(); // Update intersections based on touch
+
+                    // Trigger interaction if an object is tapped
+                     if (this.intersectedObject) {
+                        console.log(`Tapped on: ${this.intersectedObject.userData.name || 'Unnamed Object'}`);
+                         if (this.intersectedObject.material.color) {
+                            this.intersectedObject.material.color.set(Math.random() * 0xffffff);
+                        }
+                    }
+                }
+
+                updateFPS() {
+                    const time = performance.now();
+                    this.frameCount++;
+                    if (time >= this.lastFpsUpdate + 1000) {
+                        this.currentFps = Math.round((this.frameCount * 1000) / (time - this.lastFpsUpdate));
+                        document.getElementById('fps-counter').textContent = `FPS: ${this.currentFps}`;
+                        this.lastFpsUpdate = time;
+                        this.frameCount = 0;
+                    }
+                }
+
+                animate() {
+                    requestAnimationFrame(this.animate);
+                    const delta = this.clock.getDelta();
+
+                    // Update controls only if they exist and are enabled
+                    if (this.controls && this.controls.enabled) {
+                        this.controls.update(delta); // Pass delta if damping requires it
+                    }
+
+                    // Update animations
+                    this.animationObjects.forEach(obj => {
+                        // obj.rotation.y += delta * 0.5; // Example animation
+                    });
+
+                    this.updateFPS();
+
+                     // Render only if components are ready
+                    if (this.renderer && this.scene && this.camera) {
+                        this.renderer.render(this.scene, this.camera);
+                    }
+                }
+
+                showError(message) {
+                    const errorDiv = document.getElementById('error-message');
+                    if (errorDiv) {
+                         errorDiv.textContent = `Error: ${message}`;
+                         errorDiv.style.display = 'block';
+                    }
+                     // Ensure loading screen is hidden when error shows
+                    const loadingScreen = document.getElementById('loading-screen');
+                    if(loadingScreen) loadingScreen.style.display = 'none';
+                }
+
+            } // *** End of ThreeJSApp class ***
+
+            // Instantiate the app after DOM is ready
+            window.addEventListener('DOMContentLoaded', () => {
+                // Check again for THREE just before instantiation
+                 if (typeof THREE === 'undefined') {
+                     const errorDiv = document.getElementById('error-message');
+                     if(errorDiv) {
+                        errorDiv.textContent = 'Critical Error: THREE.js failed to load before app initialization.';
+                        errorDiv.style.display = 'block';
+                     }
+                     const loadingScreen = document.getElementById('loading-screen');
+                     if(loadingScreen) loadingScreen.style.display = 'none';
+                     return; // Stop execution
+                 }
+
+                try {
+                    const app = new ThreeJSApp();
+                } catch (error) {
+                    console.error("Failed to initialize ThreeJSApp:", error);
+                    const errorDiv = document.getElementById('error-message');
+                    if (errorDiv) {
+                        errorDiv.textContent = `Critical Error: Failed to start the application. ${error.message}`;
+                        errorDiv.style.display = 'block';
+                    }
+                    const loadingScreen = document.getElementById('loading-screen');
+                    if (loadingScreen) loadingScreen.style.display = 'none';
+                }
+            });
+        } // End of THREE check
+    </script>
+</body>
+</html>
