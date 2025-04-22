@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 3D Scene</title>
+    <style>
+        /* Basic reset */
+        body {
+            margin: 0;
+            font-family: 'Inter', sans-serif; /* Use Inter font */
+            overflow: hidden; /* Prevent scrollbars */
+            background-color: #f0f0f0; /* Light gray background */
+        }
+
+        /* Container for the canvas */
+        #container {
+            width: 100vw; /* Full viewport width */
+            height: 100vh; /* Full viewport height */
+            display: block;
+            position: relative; /* Needed for absolute positioning of loader */
+        }
+
+        /* Loading indicator styles */
+        #loader {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            border: 8px solid #f3f3f3; /* Light grey */
+            border-top: 8px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            z-index: 10; /* Ensure loader is above canvas */
+        }
+
+        /* WebGL compatibility message */
+        #webgl-error {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: red;
+            font-size: 1.2em;
+            text-align: center;
+            display: none; /* Hidden by default */
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            z-index: 11;
+        }
+
+
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="container">
+        <div id="loader"></div>
+        <div id="webgl-error">
+            Your browser or device does not support WebGL, which is required for this 3D content.
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/WebGL.js"></script>
+
+    <script>
+        // --- Global Variables ---
+        // Declared outside functions to be accessible globally within the script
+        let scene, camera, renderer, controls;
+        let cube, sphere, torus;
+        const interactiveObjects = []; // Array to hold objects we can interact with
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2(); // Use pointer instead of mouse for broader compatibility
+        const clock = new THREE.Clock(); // For animation timing
+
+        // --- Initialization Function ---
+        // Contains the main setup logic for the Three.js scene
+        function init() {
+            // Check for WebGL support first
+            // This check relies on the WEBGL object from WebGL.js
+            if (!WEBGL.isWebGLAvailable()) {
+                const container = document.getElementById('container');
+                const loader = document.getElementById('loader');
+                const errorMessage = document.getElementById('webgl-error');
+                if (loader) loader.style.display = 'none'; // Hide loader
+                if (errorMessage) errorMessage.style.display = 'block'; // Show error
+                // Use getWebGLErrorMessage() directly from the WEBGL object
+                if (container) container.appendChild(WEBGL.getWebGLErrorMessage()); // Add Three.js specific error message
+                console.error("WebGL is not available."); // Log error to console
+                return; // Stop initialization if WebGL is not available
+            }
+
+            const container = document.getElementById('container');
+            const loader = document.getElementById('loader');
+
+            // 1. Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+            scene.fog = new THREE.Fog(0x87CEEB, 10, 50); // Add fog for depth
+
+            // 2. Camera Setup
+            camera = new THREE.PerspectiveCamera(
+                75, // FOV
+                container.clientWidth / container.clientHeight, // Aspect ratio
+                0.1, // Near plane
+                1000 // Far plane
+            );
+            camera.position.set(5, 5, 10); // Initial camera position
+
+            // 3. Renderer Setup
+            renderer = new THREE.WebGLRenderer({ antialias: true }); // Antialiasing for smoother edges
+            renderer.setSize(container.clientWidth, container.clientHeight); // Set size to container dimensions
+            renderer.setPixelRatio(window.devicePixelRatio); // Adjust for high DPI screens
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Use softer shadows
+            container.appendChild(renderer.domElement); // Add the renderer's canvas element to the DOM
+
+            // 4. Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Soft ambient light
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8); // Brighter directional light
+            directionalLight.position.set(5, 10, 7.5); // Position the light
+            directionalLight.castShadow = true; // Enable shadow casting
+            // Configure shadow map properties
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            scene.add(directionalLight);
+
+            // 5. Create Objects
+            const materialParams = { metalness: 0.1, roughness: 0.5 }; // Shared material properties
+
+            // Cube
+            const cubeGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, ...materialParams });
+            cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+            cube.position.set(-3, 0, 0);
+            cube.castShadow = true;
+            cube.receiveShadow = true;
+            cube.userData = { originalColor: new THREE.Color(0xff0000), name: 'Cube' }; // Store data
+            scene.add(cube);
+            interactiveObjects.push(cube);
+
+            // Sphere
+            const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+            const sphereMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00, ...materialParams });
+            sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            sphere.position.set(0, 0, -2);
+            sphere.castShadow = true;
+            sphere.receiveShadow = true;
+            sphere.userData = { originalColor: new THREE.Color(0x00ff00), name: 'Sphere' };
+            scene.add(sphere);
+            interactiveObjects.push(sphere);
+
+            // Torus
+            const torusGeometry = new THREE.TorusGeometry(1, 0.4, 16, 100);
+            const torusMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff, ...materialParams });
+            torus = new THREE.Mesh(torusGeometry, torusMaterial);
+            torus.position.set(3, 0, 0);
+            torus.castShadow = true;
+            torus.receiveShadow = true;
+            torus.userData = { originalColor: new THREE.Color(0x0000ff), name: 'Torus' };
+            scene.add(torus);
+            interactiveObjects.push(torus);
+
+            // Ground Plane
+            const planeGeometry = new THREE.PlaneGeometry(50, 50);
+            const planeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, side: THREE.DoubleSide, metalness: 0.1, roughness: 0.8 });
+            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+            plane.rotation.x = -Math.PI / 2; // Rotate flat
+            plane.position.y = -1.5; // Position below objects
+            plane.receiveShadow = true; // Allow plane to receive shadows
+            scene.add(plane);
+
+            // 6. Controls Setup
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooth camera movement
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false; // Consistent panning
+            controls.minDistance = 3; // Zoom limits
+            controls.maxDistance = 30;
+            controls.maxPolarAngle = Math.PI / 2 - 0.05; // Prevent looking under the ground
+            controls.target.set(0, 0, 0); // Look at the center
+            controls.update(); // Initial update
+
+            // 7. Event Listeners
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown, false); // Unified click/tap
+
+            // Hide loader and start animation
+            if (loader) loader.style.display = 'none';
+            animate(); // Start the rendering loop
+        }
+
+        // --- Handle Window Resize ---
+        // Adjusts camera and renderer on window resize
+        function onWindowResize() {
+            const container = document.getElementById('container');
+            // Added checks for renderer and camera existence
+            if (!container || !renderer || !camera) return;
+
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix(); // Important after changing aspect ratio
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // --- Handle Pointer Down Event (Click/Tap) ---
+        // Handles interaction with objects
+        function onPointerDown(event) {
+             // Added checks for essential components
+             if (!renderer || !camera || !raycaster || !interactiveObjects.length) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera); // Update raycaster
+            const intersects = raycaster.intersectObjects(interactiveObjects); // Check for intersections
+
+            if (intersects.length > 0) {
+                const intersectedObject = intersects[0].object;
+                const originalColor = intersectedObject.userData.originalColor;
+                const highlightColor = new THREE.Color(0xffff00); // Yellow
+
+                if (!intersectedObject.userData.isHighlighted) {
+                    intersectedObject.material.color.copy(highlightColor);
+                    intersectedObject.userData.isHighlighted = true;
+                    console.log(`Clicked/Tapped on: ${intersectedObject.userData.name}`);
+
+                    // Revert color after a delay
+                    setTimeout(() => {
+                        if (intersectedObject && intersectedObject.userData.isHighlighted) {
+                           intersectedObject.material.color.copy(originalColor);
+                           intersectedObject.userData.isHighlighted = false;
+                        }
+                    }, 500); // 0.5 second highlight
+                }
+            }
+        }
+
+        // --- Animation Loop ---
+        // Continuously renders the scene and updates animations/controls
+        function animate() {
+            requestAnimationFrame(animate); // Request next frame
+
+            // Added checks for essential components before updating
+            if (!controls || !cube || !sphere || !torus || !renderer || !scene || !camera) return;
+
+            const delta = clock.getDelta(); // Time since last frame
+
+            // Update object animations
+            cube.rotation.x += 0.5 * delta;
+            cube.rotation.y += 0.5 * delta;
+            sphere.position.y = Math.sin(clock.getElapsedTime() * 1.5) * 0.5; // Bobbing
+            torus.rotation.y += 0.8 * delta;
+            torus.rotation.z -= 0.4 * delta;
+
+            controls.update(); // Update controls for damping
+            renderer.render(scene, camera); // Render the scene
+        }
+
+        // --- Start Execution ---
+        // IMPORTANT: Call init() only after the window (including all scripts) is fully loaded.
+        window.onload = init;
+
+    </script>
+</body>
+</html>
+```
+
+The key change is ensuring the `init` function itself is only called *inside* the `window.onload` event listener. This guarantees that by the time `init()` runs, all external scripts like `WebGL.js` have been loaded and parsed by the browser, making the `WEBGL` object available for the check.
+
+Hopefully, this resolves the error for good! Let me know if it works or if any other issues ari
